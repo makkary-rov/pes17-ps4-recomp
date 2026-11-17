@@ -34,6 +34,11 @@ or, in an existing checkout, `git submodule update --init`. Submodules: `gpu/thi
 
 Set `core.autocrlf=false` before cloning. The repository stores LF; `.gitattributes` keeps vendored CRLF files byte-identical.
 
+### Windows clone settings
+
+- Use `git config --global core.longpaths true` (or clone to a short path). Without it, the `fsr-vulkan` checkout fails with "Filename too long". Set it in the `fsr-vulkan` submodule too if you clone without `--global`.
+- Submodules inherit `core.autocrlf` from the system or global Git config. The build tolerates CRLF in the FSR-Vulkan patch step, but `core.autocrlf=false` is advised.
+
 ## 3. Fetched dependencies (CMake FetchContent)
 
 The build fetches three pinned dependencies unless you seed them locally:
