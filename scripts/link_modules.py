@@ -16,9 +16,8 @@ import hashlib
 import json
 from pathlib import Path
 import struct
-from prepare import parse_self, span, unpack
+from prepare import parse_elf, parse_self, span, unpack
 from link_libc import encode_id
-from redzone import protect_image
 
 DEFAULT_MODULES = ('libc.prx', 'libSceFios2.prx')
 FS_LOAD = bytes.fromhex('64488b042500000000')  # mov rax, fs:[0]
@@ -26,7 +25,11 @@ FS_LOAD = bytes.fromhex('64488b042500000000')  # mov rax, fs:[0]
 
 def module(path):
     source = path.read_bytes()
-    elf, header, ph, _, missing = parse_self(source)
+    if source[:4] == b'ELF':
+        elf, _, ph = parse_elf(source)
+        header, missing = None, []
+    else:
+        elf, header, ph, _, missing = parse_self(source)
     dp = next(p for p in ph if p['type'] == 2)
     dynamic = []
     for pos in range(dp['offset'], dp['offset'] + dp['filesz'], 16):
@@ -92,7 +95,7 @@ def patch_fs_loads(image, ph, base):
 
 
 def link(game, out, module_names=DEFAULT_MODULES):
-    main = module(game / 'eboot.bin')
+    main = module(game / 'eboot.elf' if (game / 'eboot.elf').is_file() else game / 'eboot.bin')
     raw = (out / 'boot.bin').read_bytes()
     magic, size, entry, ns, nr, ni, flags = unpack('<8s6Q', raw, 0)
     if magic != b'PESIMG1\0':
@@ -198,13 +201,10 @@ def link(game, out, module_names=DEFAULT_MODULES):
                           tls_relocations=tls_relocations, exports=count, sha256=m['sha256']))
         base = (base + modsize + 65535) & ~65535
 
-    # ELF identity stays original for native hooks/content tools. Redirect stores
-    # only for the same 1.09 executable those tools already validate.
-    from engine_assets import EBOOT_SHA
-    if hashlib.sha256(main['elf']).hexdigest() in EBOOT_SHA:
-        red_zone = protect_image(image, segments, relocs)
-    else:
-        red_zone = dict(enabled=False, sites=0, reason='unverified executable')
+    # ELF identity stays original for native hooks/content tools. The red-zone store
+    # redirect is not applied: it is a game-specific patch (ledger row G-43) and needs a
+    # patch record and a test before it may return.
+    red_zone = dict(enabled=False, sites=0, reason='not applied (G-43 pending)')
 
     bindings, unresolved = [], []
     for identity, index in identities.items():
