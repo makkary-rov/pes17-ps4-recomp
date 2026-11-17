@@ -277,3 +277,21 @@ const char *runtime_import_name(const char *name) {
     const char *symbol=runtime_symbol(name);
     return symbol ? symbol : "name not resolved; see analysis.json import_name_hints";
 }
+/* DIAGNOSTIC ONLY (--import-report). Never used for binding: a trap import keeps trapping even when
+ * this returns a name. Returns the first import_names row with the same 11-character NID whose full
+ * name runtime_resolve() accepts, or NULL. */
+#define IMPORT_NID_LEN 11
+/* True when both names have at least IMPORT_NID_LEN bytes and their first IMPORT_NID_LEN bytes are equal. */
+static int same_nid_prefix(const char *a, const char *b) {
+    if (strlen(a) < IMPORT_NID_LEN || strlen(b) < IMPORT_NID_LEN) return 0;
+    return memcmp(a, b, IMPORT_NID_LEN) == 0;
+}
+const char *runtime_prefix_probe(const char *name, int is_data) {
+    if (strlen(name) < IMPORT_NID_LEN + 1 || name[IMPORT_NID_LEN] != '#') return NULL;
+    for (size_t i=0;i<sizeof(import_names)/sizeof(*import_names);++i) {
+        const char *candidate=import_names[i].nid;
+        if (strlen(candidate) < IMPORT_NID_LEN + 1 || candidate[IMPORT_NID_LEN] != '#' || !same_nid_prefix(candidate,name)) continue;
+        if (runtime_resolve(candidate,is_data)) return candidate;
+    }
+    return NULL;
+}

@@ -30,6 +30,8 @@ void runtime_restart(void);
 typedef void (ABI *GuestCallback)(void);
 void runtime_start(uint64_t capabilities);
 uintptr_t runtime_resolve(const char *name, int is_data);
+/* Diagnostic only (--import-report): a candidate import_names name for an unresolved import. Never bound. */
+const char *runtime_prefix_probe(const char *name, int is_data);
 void runtime_report(void);
 void runtime_finalize(void *dso);
 uintptr_t runtime_mutex_resolve(const char *name);

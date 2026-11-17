@@ -2,6 +2,7 @@
 """Boundary tests for the native loader; uses tiny synthetic x86-64 images."""
 from paths import ROOT
 from pathlib import Path
+import itertools
 import os
 import struct
 import subprocess
@@ -36,6 +37,22 @@ def native_package(name='fixture-native', binding_address=4112, binding_kind=1,
             + struct.pack('<9Q',0,4096,5,4096,4096,lib_flags,8192,4096,6)
             + name.encode().ljust(128,b'\0') + b'after-native'.ljust(128,b'\0')
             + struct.pack('<8Q',32,1,0,0,40,1,1,0) + image)
+
+
+REPORT_IMAGE_SIZE = 12288
+
+def report_package(code):
+    # Three imports: 0 host (_init_env), 1 native (export at image +0x1010, module init returns 0),
+    # 2 trap whose NID matches _init_env with another suffix (no alias row). Slots at +0x100/+0x108/+0x110.
+    image = (code.ljust(4096, b'\0') + b'\x31\xc0\xc3'.ljust(16, b'\0') + b'\xc3').ljust(REPORT_IMAGE_SIZE, b'\0')
+    names = ['bzQExy189ZI#q#q', 'fixture-native', 'bzQExy189ZI#p#J']
+    header = struct.pack('<8s6Q', b'PESIMG3\0', len(image), 0, 3, 3, 3, 1)
+    module = struct.pack('<8Q', 4096, 8192, 4096, 8192, 32, 4, 1, 256)
+    binding = struct.pack('<3Q', 1, 4112, 1)
+    segments = struct.pack('<9Q', 0, 4096, 5, 4096, 4096, 5, 8192, 4096, 6)
+    relocs = b''.join(struct.pack('<4Q', target, 1, index, 0) for index, target in enumerate((0x100, 0x108, 0x110)))
+    return (header + module + binding + segments + b''.join(n.encode().ljust(128, b'\0') for n in names)
+            + relocs + image)
 
 
 @unittest.skipUnless(EXE.exists(), f'loader not built: {EXE} is missing (run ./build.sh first)')
@@ -236,6 +253,109 @@ class LoaderTests(unittest.TestCase):
         r = self.run_image(package(b'\xc3',capabilities=2))
         self.assertEqual(r.returncode,1)
         self.assertIn('unknown runtime capabilities',r.stderr)
+
+    def test_import_report_classifies_host_native_and_trap_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            r = self.run_image(report_package(b'\x0f\x0b'), '--stop-before-entry', '--import-report', str(report))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertEqual(rows, [
+            'index\tname\tkind\tlooked_up_as\tresult\tsymbol\tprefix_candidate',
+            '0\tbzQExy189ZI#q#q\tfunc\tbzQExy189ZI#q#q\thost\t_init_env\t-',
+            '1\tfixture-native\tfunc\tfixture-native\tnative\t-\t-',
+            '2\tbzQExy189ZI#p#J\tfunc\tbzQExy189ZI#p#J\ttrap\t-\tbzQExy189ZI#q#q',
+        ])
+        # The summary is printed when the report is written, before native module initializers run.
+        lines = r.stdout.splitlines()
+        self.assertIn('Imports: 1 host, 1 native, 1 trap, 1 prefix_only', lines)
+        self.assertEqual(lines[-1], 'Entering original x86-64 code at guest offset 0x0')
+
+    def test_trap_import_with_prefix_candidate_still_traps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            # sub rsp,8 (SysV alignment at the trap); call [rip+0x110]: the slot holding trap import 2
+            code = b'\x48\x83\xec\x08\xff\x15' + struct.pack('<i', 0x110 - 10)
+            r = self.run_image(report_package(code), '--import-report', str(report))
+            self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+            self.assertIn('first unsupported PS4 import: bzQExy189ZI#p#J', r.stdout)
+            self.assertIn('API: name not resolved', r.stdout)
+            self.assertIn('2\tbzQExy189ZI#p#J\tfunc\tbzQExy189ZI#p#J\ttrap\t-\tbzQExy189ZI#q#q',
+                          report.read_bytes().decode('ascii'))
+            self.assertIn('Imports: 1 host, 1 native, 1 trap, 1 prefix_only', r.stdout)
+
+    def test_dump_image_writes_the_bytes_before_relocation(self):
+        data = report_package(b'\x0f\x0b')
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = Path(tmp) / 'image.bin'
+            r = self.run_image(data, '--stop-before-entry', '--dump-image', str(dump))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(dump.read_bytes(), data[-REPORT_IMAGE_SIZE:])
+            bad = Path(tmp) / 'no-such-directory' / 'image.bin'
+            r = self.run_image(data, '--dump-image', str(bad))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn('cannot write image dump', r.stderr)
+
+    def test_stop_before_entry_exits_without_running_the_entry(self):
+        # The entry is ud2: running it would fault (exit 132/139), so exit 0 proves it was not entered.
+        r = self.run_image(package(b'\x0f\x0b'), '--stop-before-entry')
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(r.stdout.splitlines()[-1], 'Entering original x86-64 code at guest offset 0x0')
+        self.assertNotIn('Guest fault', r.stderr)
+
+    def test_import_report_option_without_path_is_rejected(self):
+        r = self.run_image(package(b'\xc3'), '--import-report')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('Unknown option: --import-report', r.stderr)
+
+    def test_import_report_lists_data_relocations(self):
+        # Relocation kind 2 (data): import 0 resolves to a host data symbol, import 1 is a trap.
+        data = package(b'\x0f\x0b', [(16, 2, 0, 0), (24, 2, 1, 0)], ['f7uOxY9mM1U#p#J', 'fixture-data'], capabilities=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            r = self.run_image(data, '--stop-before-entry', '--import-report', str(report))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertEqual(rows, [
+            'index\tname\tkind\tlooked_up_as\tresult\tsymbol\tprefix_candidate',
+            '0\tf7uOxY9mM1U#p#J\tdata\tf7uOxY9mM1U#p#J\thost\t__stack_chk_guard\t-',
+            '1\tfixture-data\tdata\tfixture-data\ttrap\t-\t-',
+        ])
+        self.assertIn('Imports: 1 host, 0 native, 1 trap, 0 prefix_only', r.stdout.splitlines())
+
+    def test_import_report_looked_up_name_is_the_alias_canonical_name(self):
+        data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['fixture-import'], capabilities=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            aliases = Path(tmp) / 'import-aliases.txt'
+            aliases.write_bytes(b'fixture-import uMei1W9uyNo#q#q\n')
+            r = self.run_image(data, '--stop-before-entry', '--import-aliases', str(aliases),
+                               '--import-report', str(report))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertEqual(rows[1], '0\tfixture-import\tfunc\tuMei1W9uyNo#q#q\thost\texit\t-')
+        self.assertIn('Imports: 1 host, 0 native, 0 trap, 0 prefix_only', r.stdout.splitlines())
+
+    def test_import_report_dump_and_stop_flags_are_order_independent(self):
+        data = package(b'\x0f\x0b', [(16, 2, 0, 0), (24, 2, 1, 0)], ['f7uOxY9mM1U#p#J', 'fixture-data'], capabilities=1)
+        flags = ['--stop-before-entry', '--import-report', '--dump-image']
+        expected_rows = None
+        with tempfile.TemporaryDirectory() as tmp:
+            for order in itertools.permutations(flags):
+                with self.subTest(order=order):
+                    report, dump = Path(tmp) / 'imports.tsv', Path(tmp) / 'image.bin'
+                    report.unlink(missing_ok=True)
+                    dump.unlink(missing_ok=True)
+                    values = {'--stop-before-entry': [], '--import-report': [str(report)], '--dump-image': [str(dump)]}
+                    options = [item for flag in order for item in (flag, *values[flag])]
+                    r = self.run_image(data, *options)
+                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                    self.assertEqual(r.stdout.splitlines()[-1], 'Entering original x86-64 code at guest offset 0x0')
+                    self.assertIn('Imports: 1 host, 0 native, 1 trap, 0 prefix_only', r.stdout.splitlines())
+                    self.assertEqual(dump.read_bytes(), data[-4096:])
+                    rows = report.read_bytes()
+                    expected_rows = expected_rows or rows
+                    self.assertEqual(rows, expected_rows)
 
 
 class ProbeGateTests(unittest.TestCase):

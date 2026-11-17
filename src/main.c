@@ -695,6 +695,61 @@ static void apply_patches(const char *path, Segment *segments, uint64_t ns, cons
     fclose(f);
     printf("Patches: %" PRIu64 " writes, %" PRIu64 " bytes applied, %" PRIu64 " pointers rebased\n",count,bytes,rebased);
 }
+static void report_write(FILE *out, const char *path, const char *text) {
+    if (fputs(text, out) == EOF) { fprintf(stderr, "ERROR: cannot write import report %s\n", path); exit(1); }
+}
+/* --dump-image: the image bytes as read from boot.bin, before relocations (the bytes whose SHA-256
+ * is analysis.json image_sha256). */
+static void write_image_dump(const char *path, const unsigned char *data, uint64_t size) {
+    FILE *out = fopen(path, "wb");
+    if (!out || fwrite(data, 1, size, out) != size || fclose(out)) {
+        fprintf(stderr, "ERROR: cannot write image dump %s\n", path);
+        exit(1);
+    }
+}
+/* --import-report: one TSV row per import, in import table order. result is host when runtime_resolve()
+ * accepts the looked-up name (the alias applies first), native when a native libc export is bound to
+ * the import (linked libc only), and trap otherwise (the import traps when reached). kind is data when
+ * a relocation references the import as data, else func. prefix_candidate is diagnostic only. */
+static void write_import_report(const char *path, const Reloc *relocs, uint64_t nr, uint64_t import_count,
+                                const uint64_t *bindings, const uint64_t *binding_kinds, int native_libc) {
+    unsigned char *kinds = calloc(import_count ? import_count : 1, 1);
+    if (!kinds) fail("allocation failed");
+    for (uint64_t r = 0; r < nr; ++r)
+        if (relocs[r].kind && !kinds[relocs[r].value]) kinds[relocs[r].value] = (unsigned char)relocs[r].kind;
+    FILE *out = fopen(path, "wb");
+    if (!out) { fprintf(stderr, "ERROR: cannot write import report %s\n", path); exit(1); }
+    char line[1024];
+    report_write(out, path, "index\tname\tkind\tlooked_up_as\tresult\tsymbol\tprefix_candidate\n");
+    uint64_t host = 0, native = 0, trap = 0, prefix_only = 0;
+    for (uint64_t i = 0; i < import_count; ++i) {
+        int is_data = kinds[i] == 2;
+        const char *looked = import_alias(names[i]);
+        if (!looked) looked = names[i];
+        const char *result, *candidate = "-";
+        if (runtime_resolve(looked, is_data)) {
+            result = "host";
+            ++host;
+        } else if (native_libc && bindings[i] && binding_kinds[i] == (is_data ? 2 : 1)) {
+            result = "native";
+            ++native;
+        } else {
+            result = "trap";
+            ++trap;
+            const char *probe = runtime_prefix_probe(looked, is_data);
+            if (probe) { candidate = probe; ++prefix_only; }
+        }
+        const char *symbol = runtime_symbol(looked);
+        int length = snprintf(line, sizeof(line), "%" PRIu64 "\t%s\t%s\t%s\t%s\t%s\t%s\n", i, names[i],
+                              is_data ? "data" : "func", looked, result, symbol ? symbol : "-", candidate);
+        if (length < 0 || (size_t)length >= sizeof(line)) fail("import report line too long");
+        report_write(out, path, line);
+    }
+    if (fclose(out)) { fprintf(stderr, "ERROR: cannot write import report %s\n", path); exit(1); }
+    free(kinds);
+    printf("Imports: %" PRIu64 " host, %" PRIu64 " native, %" PRIu64 " trap, %" PRIu64 " prefix_only\n",
+           host, native, trap, prefix_only);
+}
 /* Restarts the game through run.sh (the settings menu: a new render resolution is a patch
  * applied at start). Descriptors are closed first so the old GPU device and its memory are
  * released before the new process opens its own. */
@@ -771,9 +826,14 @@ int main(int argc, char **argv) {
     int cpu_only = 0, strict_imports = 0;
     unsigned timeout_seconds = 10;
     const char *content_profile=NULL, *app0=NULL, *user_dir=NULL, *patch_file=NULL, *import_aliases=NULL;
+    const char *import_report=NULL, *dump_image=NULL;
+    int stop_before_entry = 0;
     for (int i = 2; i < argc; ++i) {
         if (!strcmp(argv[i], "--cpu-only")) cpu_only = 1;
         else if (!strcmp(argv[i], "--strict-imports")) strict_imports = 1;
+        else if (!strcmp(argv[i], "--stop-before-entry")) stop_before_entry = 1;
+        else if (!strcmp(argv[i], "--import-report") && i+1<argc) import_report=argv[++i];
+        else if (!strcmp(argv[i], "--dump-image") && i+1<argc) dump_image=argv[++i];
         else if (!strcmp(argv[i], "--content-profile") && i+1<argc) content_profile=argv[++i];
         else if (!strcmp(argv[i], "--app0") && i+1<argc) app0=argv[++i];
         else if (!strcmp(argv[i], "--user") && i+1<argc) user_dir=argv[++i];
@@ -783,7 +843,7 @@ int main(int argc, char **argv) {
         else { fprintf(stderr, "Unknown option: %s\n", argv[i]); return 1; }
     }
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--import-aliases file] [--timeout seconds]\n", argv[0]);
+        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--import-aliases file] [--import-report file] [--dump-image file] [--stop-before-entry] [--timeout seconds]\n", argv[0]);
         return 1;
     }
     if (content_profile) {
@@ -929,6 +989,7 @@ int main(int argc, char **argv) {
 #endif
     if (fread(image, 1, size, f) != size || fgetc(f) != EOF) fail("incorrect memory image size");
     fclose(f);
+    if (dump_image) write_image_dump(dump_image, image, size);
     if (!cpu_only) {
         char title[128]="pes17recomp", serial[16]="UNKNOWN", sfo[4096];
         uint32_t attributes=0;
@@ -990,6 +1051,7 @@ int main(int argc, char **argv) {
     }
     if (!executable_entry) fail("entry is not executable");
     printf("Mapped %" PRIu64 " bytes, %" PRIu64 " segments; applied %" PRIu64 " relocations\n", size, ns, nr);
+    if (import_report) write_import_report(import_report, relocs, nr, import_count, bindings, binding_kinds, native_libc);
     if (native_libc) {
         for (uint64_t m=0;m<module_count;++m) {
             int init_executable=0;
@@ -1016,6 +1078,7 @@ int main(int argc, char **argv) {
     SetUnhandledExceptionFilter(unhandled_filter);
 #endif
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
+    if (stop_before_entry) { fflush(NULL); _exit(0); } /* --stop-before-entry: no jump into guest code */
     entered_game=1;
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};
 #ifdef _WIN32
