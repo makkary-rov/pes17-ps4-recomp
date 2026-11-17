@@ -318,11 +318,11 @@ static void report_exception(EXCEPTION_POINTERS *e) {
             c->Rax, c->Rbx, c->Rcx, c->Rdx, c->Rsi, c->Rdi, c->Rbp, c->Rsp);
     fprintf(stderr, "  r8=%016llx r9=%016llx r10=%016llx r11=%016llx\n  r12=%016llx r13=%016llx r14=%016llx r15=%016llx\n",
             c->R8, c->R9, c->R10, c->R11, c->R12, c->R13, c->R14, c->R15);
-    {   /* the 32 code bytes around RIP (16 before, 16 from RIP): lets the faulting instruction be decoded offline */
-        unsigned char code[32];
+    {   /* the code bytes around RIP (128 before, 32 from RIP): lets the faulting instruction be decoded offline */
+        unsigned char code[160];
         SIZE_T got = 0;
-        if (ReadProcessMemory(GetCurrentProcess(), (void *)(uintptr_t)(c->Rip - 16), code, sizeof(code), &got) && got == sizeof(code)) {
-            fputs("  code[rip-16..rip+16]:", stderr);
+        if (ReadProcessMemory(GetCurrentProcess(), (void *)(uintptr_t)(c->Rip - 128), code, sizeof(code), &got) && got == sizeof(code)) {
+            fputs("  code[rip-128..rip+32]:", stderr);
             for (size_t i = 0; i < sizeof(code); ++i) fprintf(stderr, " %02x", code[i]);
             fputc('\n', stderr);
         }
