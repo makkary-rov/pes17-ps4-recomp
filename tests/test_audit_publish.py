@@ -22,10 +22,14 @@ class NameTests(unittest.TestCase):
                 self.assertTrue(ap.check_name(rel), rel)
 
     def test_accepted_names(self):
-        for rel in ('src/main.c', 'scripts/prepare.py',
+        for rel in ('src/main.c', 'scripts/prepare.py', 'scripts/gen_gnm_table.py',
+                    'scripts/gnm/callgraph.py', 'tests/gnm/test_callgraph.py',
                     'gpu/third_party/gcn/include/gcn/si_ci_vi_merged_offset.h'):
             with self.subTest(rel=rel):
                 self.assertEqual(ap.check_name(rel), [], rel)
+
+    def test_no_pending_entries(self):
+        self.assertEqual(ap.PENDING, {})
 
 
 class SizeTests(unittest.TestCase):

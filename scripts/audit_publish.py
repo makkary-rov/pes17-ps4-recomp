@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PENDING = {"gpu/shim/pes_gnm_table.inc": "U-4, drop at M2"}
+PENDING = {}  # tracked files reported as WARN until removed; none left (U-4 dropped at M2)
 TEXT_SUFFIXES = {".c", ".h", ".cpp", ".hpp", ".inc", ".py", ".sh", ".md", ".txt", ".json", ".cmake",
                  ".glsl", ".comp", ".frag", ".vert", ".ini", ".example", ".yml", ".patch", ".bat", ".ps1"}
 TEXT_NAMES = {"LICENSE", "NOTICE", "CMakeLists.txt"}

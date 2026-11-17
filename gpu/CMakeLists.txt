@@ -214,7 +214,8 @@ target_compile_definitions(pesgpu PRIVATE IMGUI_IMPL_VULKAN_NO_PROTOTYPES
     PES_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf")
 set_source_files_properties(shim/pes_overlay.cpp PROPERTIES
     OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf)
-target_include_directories(pesgpu PRIVATE shim shadps4 ${SHADER_INCLUDE} third_party/gcn/include third_party/half/include)
+target_include_directories(pesgpu PRIVATE shim shadps4 ${SHADER_INCLUDE} third_party/gcn/include third_party/half/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/title/generated)
 target_compile_definitions(pesgpu PRIVATE BOOST_ASIO_STANDALONE NDEBUG)
 target_compile_options(pesgpu PRIVATE -Wno-deprecated-declarations -Wno-missing-field-initializers)
 # The Linux shared library is loaded at process startup; Windows links it statically.

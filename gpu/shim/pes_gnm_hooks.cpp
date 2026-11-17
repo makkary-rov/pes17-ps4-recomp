@@ -26,10 +26,17 @@ struct Entry {
     bool cb_method; // calls the command buffer's reserve callback: rdi is the command buffer
     const char* pm4;
 };
+#if __has_include("pes_gnm_table.inc")
 constexpr Entry Table[] = {
 #include "pes_gnm_table.inc"
 };
 constexpr std::size_t Count = sizeof(Table) / sizeof(Table[0]);
+#else
+// No generated table (scripts/gen_gnm_table.py writes it): zero rows. The one-element sentinel
+// only keeps the array legal; Count is 0, so nothing reads it.
+constexpr Entry Table[] = {{}};
+constexpr std::size_t Count = 0;
+#endif
 
 /// Hook stub per function: `lock inc qword [rip+counter]`, the moved prologue, `jmp` back past it.
 constexpr std::size_t SlotSize = 256; // observing stubs are ~190 bytes
@@ -516,6 +523,10 @@ void PatchImage(unsigned char* image, std::uint64_t size) {
     if (!observe && (!env || env[0] != '1')) {
         return;
     }
+    if (Count == 0) {
+        std::printf("GNM hooks: bound 0 of 0 (no generated table)\n");
+        return;
+    }
     const std::size_t stub_bytes = (Count + 1) * SlotSize; // + the shared exit thunk
     const std::size_t page = std::size_t(sysconf(_SC_PAGESIZE));
     const std::size_t code_bytes = (stub_bytes + page - 1) / page * page;
@@ -589,7 +600,7 @@ void PatchImage(unsigned char* image, std::uint64_t size) {
         ++patched;
     }
     mprotect(stubs, code_bytes, PROT_READ | PROT_EXEC);
-    std::printf("Gnm census: %zu of %zu libGnm entry points hooked (%zu do not match the 1.09 eboot)%s\n",
+    std::printf("GNM hooks: bound %zu of %zu (%zu prologue mismatches)%s\n",
                 patched, Count, mismatched, observe ? "; command buffer methods observed" : "");
     std::thread(ReportLoop).detach();
 }

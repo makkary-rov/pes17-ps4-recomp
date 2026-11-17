@@ -15,5 +15,5 @@ whose tooling was removed; no title-specific names are used in this file.
 | input hooks | `gpu/shim/input/controller_backends.h` is the only remnant (H-14) | H-14 | absent (only `controller_backends.h` remains, not removed here) | n/a |
 | foxgpu, G-30 shim, G-34 sound hack, G-36 `vk_globals.h` | none (grep = 0) | H-15, G-30, G-34, G-36 | absent | n/a |
 | vulkan smoke test | `src/vulkan_smoke.c` (removed), `build.sh` link line, `src/main.c` dispatch | G-39 | dropped in M1e (Step 1) | M1e |
-| GNM table | `gpu/shim/pes_gnm_table.inc`, `tools/re/gen_gnm_table.py`; included by `pes_gnm_hooks.cpp` | U-4 | DROP at M2 (game-derived generated table; D3). audit_publish reports it as WARN-pending | M2 |
+| GNM table | `gpu/shim/pes_gnm_table.inc` removed (M2); now generated at run time by `scripts/gen_gnm_table.py --region LO-HI` into the git-ignored `src/title/generated/pes_gnm_table.inc`; included by `gpu/shim/pes_gnm_hooks.cpp` (zero-row fallback when absent); helpers `scripts/gnm/` (from the upstream GPL-2 base) | U-4 | DROP of the tracked table done at M2 (D3: nothing game-derived is tracked; audit has no PENDING entries) | M2 |
 | Windows experiments | `gpu/shim/pes_windows_experiments.cpp` | U-6 | KEEP, review at M2 | M2 |

@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Optional names for scripts/gen_gnm_table.py --names: one "offset name" per line, offset in hex.
+# Empty for PES until names are measured from its own code; names of other titles must not be added here.
