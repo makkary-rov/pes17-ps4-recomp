@@ -1203,11 +1203,10 @@ int main(int argc, char **argv) {
         for (uint64_t m=0;m<module_count;++m) {
             printf("Starting linked module %" PRIu64 " at image offset 0x%" PRIx64 "; native bindings=%" PRIu64 "\n",m,modules[m].init,nb);
             typedef int (ABI *ModuleInit)(uint64_t,void *,void *);
-            /* Module initializers get (argc, argv, environ) like the platform's runtime linker passes them:
-               libc writes a terminating zero through the environment pointer. The environment is empty. */
+            /* Module initializers get (argc, argv, hook): the third argument is a function pointer that libc
+               calls when it is not NULL (a run with an array there jumped into the array), so it stays NULL. */
             static char *module_argv[2]={"/app0/eboot.bin",NULL};
-            static char *module_environ[2]={NULL,NULL};
-            int result=((ModuleInit)(image+modules[m].init))(1,module_argv,module_environ);
+            int result=((ModuleInit)(image+modules[m].init))(1,module_argv,NULL);
             printf("Module %" PRIu64 " initializer returned %d\n",m,result);
             if (result) fail("module initializer failed");
         }
