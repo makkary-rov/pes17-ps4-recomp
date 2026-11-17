@@ -16,7 +16,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
-from prepare import parse_elf, parse_self, span, unpack
+from prepare import parse_elf, parse_self, segment_flags, span, unpack
 from link_libc import encode_id
 
 DEFAULT_MODULES = ('libc.prx', 'libSceFios2.prx')
@@ -148,7 +148,7 @@ def link(game, out, module_names=DEFAULT_MODULES, title=None):
             if p['filesz'] > p['memsz']:
                 raise ValueError(f'{filename}: invalid segment size')
             image[base + p['vaddr']:base + p['vaddr'] + p['filesz']] = span(m['elf'], p['offset'], p['filesz'])
-            segments.append((base + p['vaddr'], p['memsz'], p['flags']))
+            segments.append((base + p['vaddr'], p['memsz'], segment_flags(p)))
         tls = next((p for p in m['ph'] if p['type'] == 7), None)
         module_id = 0
         if tls:

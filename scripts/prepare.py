@@ -29,6 +29,15 @@ def unpack(fmt, data, offset):
     return struct.unpack(fmt, span(data, offset, struct.calcsize(fmt)))
 
 
+PT_SCE_RELRO = 0x61000010
+
+
+def segment_flags(p):
+    """Protection for a load segment. PT_SCE_RELRO is mapped writable: the game writes to it at run time
+    (a JobGraph worker faulted writing into it when it was mapped read-only, as its header says)."""
+    return p['flags'] | 2 if p['type'] == PT_SCE_RELRO else p['flags']
+
+
 def parse_self(data):
     if span(data, 0, 4) != b'O\x15=\x1d':
         raise ValueError("expected PS4 SELF")
@@ -339,7 +348,7 @@ def prepare(game, out, title, resource_inventory=True, allow_hash_mismatch=False
         f.write(struct.pack('<8sQQQQQQ', b'PESIMG1\0', size, entry, len(loads), len(relocs), len(names),
                             capability))
         for p in loads:
-            f.write(struct.pack('<QQQ', p['vaddr'], p['memsz'], p['flags']))
+            f.write(struct.pack('<QQQ', p['vaddr'], p['memsz'], segment_flags(p)))
         for name in names:
             encoded = name.encode()
             if len(encoded) >= 128:
