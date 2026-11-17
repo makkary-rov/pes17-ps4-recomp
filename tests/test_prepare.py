@@ -19,17 +19,17 @@ TITLE = {"_license": "GPL-2.0-or-later", "schema": "pes-title-1", "title_id": "S
          "gnm_region": None, "import_suffix_map": [], "import_aliases": []}
 
 
-def synthetic_elf(extra_relocs=()):
+def synthetic_elf(extra_relocs=(), second_import=b'Fake0000002#A#B'):
     """Plain ELF64 made of invented bytes: two loads (file offset != vaddr), PT_DYNAMIC,
     the 0x61000000 blob with strings, symbols and two relocation tables."""
-    names = [b'libsynth', b'modsynth', b'Fake0000001#A#B', b'Fake0000002#A#B', b'localfn', b'absfn']
+    names = [b'libsynth', b'modsynth', b'Fake0000001#A#B', second_import, b'localfn', b'absfn']
     strings, where = b'', {}
     for name in names:
         where[name] = len(strings)
         strings += name + b'\0'
     syms = [(0, 0, 0, 0, 0, 0),
             (where[b'Fake0000001#A#B'], 0x12, 0, 0, 0, 0),       # import function
-            (where[b'Fake0000002#A#B'], 0x11, 0, 0, 0, 0),       # import object
+            (where[second_import], 0x11, 0, 0, 0, 0),       # import object
             (where[b'localfn'], 0x12, 0, 1, 0x1010, 0),          # defined function
             (where[b'absfn'], 0x11, 0, 0xfff1, 0x77, 0)]         # absolute symbol
     rela1 = [(0x1008, 8, 0x1234), (0x1010, (1 << 32) | 7, 0), (0x2000, (2 << 32) | 6, 0),
@@ -195,6 +195,72 @@ class PrepareTests(unittest.TestCase):
         analysis = json.loads((out / 'analysis.json').read_text(encoding='utf-8'))
         self.assertEqual(analysis['hash_check']['status'], 'mismatch')
         self.assertTrue(analysis['hash_check']['allowed_mismatch'])
+
+    def write_title(self, md5, **changes):
+        path = self.tmp / 'title.json'
+        path.write_text(json.dumps(dict(TITLE, eboot_elf_md5=md5, **changes)), encoding='utf-8')
+        return path
+
+    def alias_bytes(self, elf, title, name):
+        out = self.tmp / name
+        self.run_prepare(self.game(elf), out, title)
+        return (out / 'import-aliases.txt').read_bytes()
+
+    def test_empty_maps_write_an_empty_alias_file(self):
+        elf = synthetic_elf()
+        title = self.write_title(hashlib.md5(elf).hexdigest())
+        self.assertEqual(self.alias_bytes(elf, title, 'out'), b'')
+
+    def test_suffix_row_expands_to_per_import_lines_in_table_order(self):
+        elf = synthetic_elf()
+        row = dict(suffix='#A#B', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        self.assertEqual(self.alias_bytes(elf, title, 'out'),
+                         b'Fake0000001#A#B Fake0000001#q#q\nFake0000002#A#B Fake0000002#q#q\n')
+
+    def test_suffix_row_must_match_decoded_library_and_module(self):
+        elf = synthetic_elf()
+        row = dict(suffix='#A#B', library='libother', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        out = self.tmp / 'out'
+        with self.assertRaisesRegex(ValueError, 'import Fake0000001#A#B: decoded libsynth/modsynth'):
+            self.run_prepare(self.game(elf), out, title)
+        self.assertFalse((out / 'import-aliases.txt').exists())
+
+    def test_suffix_row_needs_decoded_library_and_module(self):
+        elf = synthetic_elf(second_import=b'Fake0000002#C#B')
+        row = dict(suffix='#C#B', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        with self.assertRaisesRegex(ValueError, 'Fake0000002#C#B: library/module not decoded'):
+            self.run_prepare(self.game(elf), self.tmp / 'out', title)
+
+    def test_explicit_alias_adds_its_import_line(self):
+        elf = synthetic_elf()
+        row = {'import': 'Fake0000002#A#B', 'canonical': 'Fake0000002#q#x', 'reason': 'test', 'evidence': 'test'}
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_aliases=[row])
+        self.assertEqual(self.alias_bytes(elf, title, 'out'), b'Fake0000002#A#B Fake0000002#q#x\n')
+
+    def test_explicit_alias_must_name_an_existing_import(self):
+        elf = synthetic_elf()
+        row = {'import': 'Nope0000000#A#B', 'canonical': 'Nope0000000#q#q', 'reason': 'test', 'evidence': 'test'}
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_aliases=[row])
+        with self.assertRaisesRegex(ValueError, r"import_aliases\[0\]: import 'Nope0000000#A#B' is not in this eboot"):
+            self.run_prepare(self.game(elf), self.tmp / 'out', title)
+
+    def test_explicit_alias_canonical_must_be_scoped(self):
+        elf = synthetic_elf()
+        row = {'import': 'Fake0000002#A#B', 'canonical': 'Fake0000002#q', 'reason': 'test', 'evidence': 'test'}
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_aliases=[row])
+        with self.assertRaisesRegex(ValueError, r'import_aliases\[0\]\.canonical: must be NID#library#module'):
+            self.run_prepare(self.game(elf), self.tmp / 'out', title)
+
+    def test_explicit_alias_cannot_repeat_a_suffix_row(self):
+        elf = synthetic_elf()
+        suffix = dict(suffix='#A#B', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        row = {'import': 'Fake0000002#A#B', 'canonical': 'Fake0000002#q#x', 'reason': 'test', 'evidence': 'test'}
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[suffix], import_aliases=[row])
+        with self.assertRaisesRegex(ValueError, 'already covered by import_suffix_map'):
+            self.run_prepare(self.game(elf), self.tmp / 'out', title)
 
     def test_analysis_records_required_fields(self):
         elf = synthetic_elf()

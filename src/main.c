@@ -48,6 +48,57 @@ static int gpu_enabled;
 
 static __attribute__((noreturn)) void fail(const char *message) { fprintf(stderr, "ERROR: %s\n", message); exit(1); }
 
+/* --import-aliases: one "<import name> <canonical name>" pair per line; # comments and blank lines
+ * are allowed. Lookup is an exact strcmp of the full import name: no NID-only or prefix matching. */
+static char (*alias_import)[128], (*alias_canonical)[128];
+static uint64_t alias_count;
+static __attribute__((noreturn)) void alias_fail(unsigned line, const char *message) {
+    fprintf(stderr, "ERROR: import aliases line %u: %s\n", line, message);
+    exit(1);
+}
+static void load_import_aliases(const char *path, uint64_t max_count) {
+    FILE *f = fopen(path, "r");
+    if (!f) fail("cannot open import aliases");
+    alias_import = calloc(max_count ? max_count : 1, sizeof(*alias_import));
+    alias_canonical = calloc(max_count ? max_count : 1, sizeof(*alias_canonical));
+    if (!alias_import || !alias_canonical) fail("allocation failed");
+    char line[512];
+    unsigned number = 0;
+    while (fgets(line, sizeof(line), f)) {
+        size_t length = strlen(line);
+        ++number;
+        if (length == sizeof(line) - 1 && line[length - 1] != '\n') alias_fail(number, "line too long");
+        while (length && strchr("\r\n \t", line[length - 1])) line[--length] = 0;
+        char *import = line + strspn(line, " \t");
+        if (!*import || *import == '#') continue;
+        char *end = import + strcspn(import, " \t");
+        if (!*end) alias_fail(number, "expected '<import> <canonical>'");
+        *end = 0;
+        char *canonical = end + 1 + strspn(end + 1, " \t");
+        if (!*canonical) alias_fail(number, "expected '<import> <canonical>'");
+        char *tail = canonical + strcspn(canonical, " \t");
+        if (*tail) {
+            *tail++ = 0;
+            if (*(tail + strspn(tail, " \t"))) alias_fail(number, "expected exactly two names");
+        }
+        int hashes = 0;
+        for (const char *c = canonical; *c; ++c) hashes += *c == '#';
+        if (strlen(import) >= 128 || strlen(canonical) >= 128) alias_fail(number, "name too long");
+        if (hashes != 2 || canonical[0] == '#') alias_fail(number, "canonical name must be NID#library#module");
+        for (uint64_t i = 0; i < alias_count; ++i)
+            if (!strcmp(alias_import[i], import)) alias_fail(number, "duplicate import alias");
+        if (alias_count == max_count) alias_fail(number, "more alias lines than imports");
+        snprintf(alias_import[alias_count], sizeof(*alias_import), "%s", import);
+        snprintf(alias_canonical[alias_count], sizeof(*alias_canonical), "%s", canonical);
+        ++alias_count;
+    }
+    fclose(f);
+}
+static const char *import_alias(const char *name) {
+    for (uint64_t i = 0; i < alias_count; ++i)
+        if (!strcmp(alias_import[i], name)) return alias_canonical[i];
+    return NULL;
+}
 /* The game's code was compiled for the PS4's CPU (AMD Jaguar) and runs as it is: AVX, BMI1
  * (andn/bextr/blsr/tzcnt), MOVBE, LZCNT and POPCNT, thousands of each in eboot.bin. A CPU without
  * them stops at the first one with SIGILL (exit code 132, issue #26), and lzcnt/tzcnt even run as
@@ -719,7 +770,7 @@ int main(int argc, char **argv) {
     check_cpu();
     int cpu_only = 0, strict_imports = 0;
     unsigned timeout_seconds = 10;
-    const char *content_profile=NULL, *app0=NULL, *user_dir=NULL, *patch_file=NULL;
+    const char *content_profile=NULL, *app0=NULL, *user_dir=NULL, *patch_file=NULL, *import_aliases=NULL;
     for (int i = 2; i < argc; ++i) {
         if (!strcmp(argv[i], "--cpu-only")) cpu_only = 1;
         else if (!strcmp(argv[i], "--strict-imports")) strict_imports = 1;
@@ -727,11 +778,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--app0") && i+1<argc) app0=argv[++i];
         else if (!strcmp(argv[i], "--user") && i+1<argc) user_dir=argv[++i];
         else if (!strcmp(argv[i], "--patches") && i+1<argc) patch_file=argv[++i];
+        else if (!strcmp(argv[i], "--import-aliases") && i+1<argc) import_aliases=argv[++i];
         else if (!strcmp(argv[i], "--timeout") && i+1<argc) timeout_seconds=(unsigned)strtoul(argv[++i],NULL,10);
         else { fprintf(stderr, "Unknown option: %s\n", argv[i]); return 1; }
     }
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--timeout seconds]\n", argv[0]);
+        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--import-aliases file] [--timeout seconds]\n", argv[0]);
         return 1;
     }
     if (content_profile) {
@@ -845,6 +897,7 @@ int main(int argc, char **argv) {
     if (fread(names, 128, import_count, f) != import_count) fail("truncated import names");
     for (uint64_t i = 0; i < import_count; ++i)
         if (!memchr(names[i], 0, 128)) fail("unterminated import name");
+    if (import_aliases) load_import_aliases(import_aliases, import_count);
     for (uint64_t i = 0; i < nr; ++i) {
         relocs[i].target = read64(f);
         relocs[i].kind = read64(f);
@@ -911,7 +964,8 @@ int main(int argc, char **argv) {
                         : relocs[i].kind == 1 ? (uintptr_t)(traps + 32 * relocs[i].value)
                         : (uintptr_t)image + relocs[i].value;
         if (relocs[i].kind) {
-            uintptr_t resolved = runtime_resolve(names[relocs[i].value], relocs[i].kind == 2);
+            const char *lookup = import_alias(names[relocs[i].value]);
+            uintptr_t resolved = runtime_resolve(lookup ? lookup : names[relocs[i].value], relocs[i].kind == 2);
             if (resolved) value = resolved + relocs[i].addend;
             else if (native_libc && bindings[relocs[i].value]) {
                 uint64_t address=bindings[relocs[i].value];

@@ -97,6 +97,58 @@ class LoaderTests(unittest.TestCase):
         self.assertIn('module initializer failed',r.stderr)
         self.assertNotIn('Entering original',r.stdout)
 
+    def exit_image(self, name):
+        # mov edi,7; jmp [rip+5] through a relocated import pointer at +16
+        code = b'\xbf\x07\0\0\0\xff\x25\x05\0\0\0\x90\x90\x90\x90\x90' + b'\0' * 8
+        return package(code, [(16, 1, 0, 0)], [name], capabilities=1)
+
+    def run_aliased(self, data, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'import-aliases.txt'
+            path.write_bytes(text.encode())
+            return self.run_image(data, '--import-aliases', str(path))
+
+    def test_import_alias_maps_full_name_to_canonical(self):
+        r = self.run_aliased(self.exit_image('fixture-import'), 'fixture-import uMei1W9uyNo#q#q\n')
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+        self.assertIn('guest requested exit(7)', r.stdout)
+
+    def test_unaliased_import_still_traps(self):
+        r = self.run_image(self.exit_image('fixture-import'))
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: fixture-import', r.stdout)
+
+    def test_same_nid_with_other_suffix_is_not_matched(self):
+        r = self.run_image(self.exit_image('uMei1W9uyNo#q#x'))
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: uMei1W9uyNo#q#x', r.stdout)
+        r = self.run_aliased(self.exit_image('uMei1W9uyNo#q#x'), 'fixture-import uMei1W9uyNo#q#q\n')
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: uMei1W9uyNo#q#x', r.stdout)
+
+    def test_alias_file_comments_blank_lines_and_crlf_are_accepted(self):
+        r = self.run_aliased(self.exit_image('fixture-import'),
+                             '# generated\r\n\r\nfixture-import uMei1W9uyNo#q#q\r\n')
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+
+    def test_malformed_alias_lines_are_rejected(self):
+        cases = [('fixture-import\n', "expected '<import> <canonical>'"),
+                 ('fixture-import uMei1W9uyNo#q#q extra\n', 'expected exactly two names'),
+                 ('fixture-import uMei1W9uyNo\n', 'canonical name must be NID#library#module'),
+                 ('fixture-import uMei1W9uyNo#q#q\nfixture-import uMei1W9uyNo#q#q\n', 'duplicate import alias'),
+                 ('fixture-import uMei1W9uyNo#q#q\nother uMei1W9uyNo#q#q\n', 'more alias lines than imports')]
+        for text, message in cases:
+            with self.subTest(text=text):
+                r = self.run_aliased(self.exit_image('fixture-import'), text)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn('ERROR: import aliases line', r.stderr)
+                self.assertIn(message, r.stderr)
+
+    def test_missing_alias_file_is_an_error(self):
+        r = self.run_image(self.exit_image('fixture-import'), '--import-aliases', 'no-such-aliases.txt')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('cannot open import aliases', r.stderr)
+
     def test_base_relative_address_is_relocated(self):
         # jump via a relative relocation to code at +16, then to an import at +24
         code = b'\xff\x25\x02\0\0\0\x90\x90' + b'\0'*8 + b'\xff\x25\x02\0\0\0\x90\x90'

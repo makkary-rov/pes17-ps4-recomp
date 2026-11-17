@@ -13,6 +13,7 @@ import base64
 import collections
 import hashlib
 import json
+import re
 from pathlib import Path
 import struct
 import title_config
@@ -98,6 +99,51 @@ def encode_id(value):
         result = alphabet[value & 63] + result
         value >>= 6
     return result
+
+
+CANONICAL_RE = re.compile(r'^[^#\s]+#[^#\s]+#[^#\s]+$')
+
+
+def build_import_aliases(names, identities, config):
+    """Return the import-aliases.txt text: one '<import> <canonical>' line per aliased import,
+    in import table order. A suffix-map row aliases each import with its suffix, but only after
+    the import's own decoded library and module equal the row's. Explicit import_aliases rows
+    name an import directly; it must exist and no suffix row may cover it as well."""
+    rows = {row['suffix']: row for row in config['import_suffix_map']}
+    chosen = {}
+    for name in names:
+        parts = name.split('#')
+        row = rows.get('#' + '#'.join(parts[1:])) if len(parts) == 3 else None
+        if row is None:
+            continue
+        _, library, module = identities.get(name, [None, None, None])
+        if library is None or module is None:
+            raise ValueError(f"import {name}: library/module not decoded, but suffix map row "
+                             f"{row['suffix']} needs them")
+        if (library, module) != (row['library'], row['module']):
+            raise ValueError(f"import {name}: decoded {library}/{module}, suffix map row "
+                             f"{row['suffix']} says {row['library']}/{row['module']}")
+        chosen[name] = parts[0] + row['canonical']
+    present = set(names)
+    explicit = {}
+    for index, row in enumerate(config['import_aliases']):
+        where = f"import_aliases[{index}]"
+        if row['import'] not in present:
+            raise ValueError(f"{where}: import {row['import']!r} is not in this eboot's import table")
+        if row['import'] in chosen:
+            raise ValueError(f"{where}: import {row['import']!r} is already covered by import_suffix_map")
+        if not CANONICAL_RE.match(row['canonical']):
+            raise ValueError(f"{where}.canonical: must be NID#library#module, got {row['canonical']!r}")
+        explicit[row['import']] = row['canonical']
+    lines = []
+    for name in dict.fromkeys(names):
+        canonical = chosen.get(name, explicit.get(name))
+        if canonical is None:
+            continue
+        if re.search(r'\s', name):
+            raise ValueError(f"import {name!r}: whitespace is not allowed in an aliased import name")
+        lines.append(f"{name} {canonical}\n")
+    return ''.join(lines)
 
 
 def read_input(game):
@@ -259,6 +305,7 @@ def prepare(game, out, title, resource_inventory=True, allow_hash_mismatch=False
             lib, mod = parts[1], parts[2]
             import_identities[name] = [parts[0], libraries[lib][0] if lib in libraries else None,
                                        modules[mod][0] if mod in modules else None]
+    aliases = build_import_aliases(names, import_identities, config)
     candidates = ('_init_env', 'atexit', 'exit', '_exit', '__cxa_atexit', '__cxa_finalize',
                   '__cxa_guard_acquire', '__cxa_guard_release', '__cxa_guard_abort',
                   '__stack_chk_guard', '__stack_chk_fail', 'malloc', 'free',
@@ -301,6 +348,7 @@ def prepare(game, out, title, resource_inventory=True, allow_hash_mismatch=False
         f.write(image)
     (out / 'eboot.elf').write_bytes(elf)
     (out / 'entry.bin').write_bytes(image[:1024])
+    (out / 'import-aliases.txt').write_bytes(aliases.encode('utf-8'))
     resources = collections.Counter()
     total_bytes = 0
     for path in ((game / 'dvdroot_ps4').rglob('*') if resource_inventory else ()):
