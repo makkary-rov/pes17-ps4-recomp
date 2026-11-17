@@ -2,12 +2,16 @@
 """Boundary tests for the native loader; uses tiny synthetic x86-64 images."""
 from paths import ROOT
 from pathlib import Path
+import os
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 
-EXE = ROOT / 'out/pes17recomp'
+# The MSYS2 CLANG64 build (Windows) writes out/pes17recomp.exe; POSIX writes out/pes17recomp.
+WINDOWS = os.name == 'nt' or sys.platform in ('cygwin', 'msys')
+EXE = ROOT / ('out/pes17recomp.exe' if WINDOWS else 'out/pes17recomp')
 
 
 def package(code, relocs=(), names=(), capabilities=None):
@@ -34,7 +38,7 @@ def native_package(name='fixture-native', binding_address=4112, binding_kind=1,
             + struct.pack('<8Q',32,1,0,0,40,1,1,0) + image)
 
 
-@unittest.skipUnless(EXE.exists(), 'build native probe first')
+@unittest.skipUnless(EXE.exists(), f'loader not built: {EXE} is missing (run ./build.sh first)')
 class LoaderTests(unittest.TestCase):
     def test_invalid_content_profile_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,10 +101,10 @@ class LoaderTests(unittest.TestCase):
         self.assertIn('module initializer failed',r.stderr)
         self.assertNotIn('Entering original',r.stdout)
 
-    def exit_image(self, name):
-        # mov edi,7; jmp [rip+5] through a relocated import pointer at +16
+    def exit_image(self, name, *unused_imports):
+        # mov edi,7; jmp [rip+5] through a relocated import pointer at +16 (import 0 is `name`)
         code = b'\xbf\x07\0\0\0\xff\x25\x05\0\0\0\x90\x90\x90\x90\x90' + b'\0' * 8
-        return package(code, [(16, 1, 0, 0)], [name], capabilities=1)
+        return package(code, [(16, 1, 0, 0)], [name, *unused_imports], capabilities=1)
 
     def run_aliased(self, data, text):
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,6 +129,39 @@ class LoaderTests(unittest.TestCase):
         r = self.run_aliased(self.exit_image('uMei1W9uyNo#q#x'), 'fixture-import uMei1W9uyNo#q#q\n')
         self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
         self.assertIn('first unsupported PS4 import: uMei1W9uyNo#q#x', r.stdout)
+
+    def test_alias_lookup_is_exact_on_the_import_side(self):
+        # A boot.bin import that is a prefix or an extension of an alias row's import name stays unresolved.
+        r = self.run_aliased(self.exit_image('fixture-import-x'), 'fixture-import uMei1W9uyNo#q#q\n')
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: fixture-import-x', r.stdout)
+        r = self.run_aliased(self.exit_image('fixture-import'), 'fixture-import-x uMei1W9uyNo#q#q\n')
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: fixture-import', r.stdout)
+        # With a row for the longer name as well (the other import is unused), each import still
+        # resolves only through its own row.
+        both = 'fixture-import uMei1W9uyNo#q#q\nfixture-import-x uMei1W9uyNo#q#q\n'
+        r = self.run_aliased(self.exit_image('fixture-import', 'fixture-import-x'), both)
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+        r = self.run_aliased(self.exit_image('fixture-import-x', 'fixture-import'), both)
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
+        r = self.run_aliased(self.exit_image('fixture-import-xy', 'fixture-import'), both)
+        self.assertEqual(r.returncode, 20, r.stdout + r.stderr)
+        self.assertIn('first unsupported PS4 import: fixture-import-xy', r.stdout)
+
+    def test_alias_names_of_128_bytes_or_more_are_rejected(self):
+        # boot.bin name fields are 128 bytes with a NUL, so a 127-byte name is the longest usable one.
+        canonical_tail = 'uMei1W9uyNo#q#' + 'q' * (128 - len('uMei1W9uyNo#q#'))
+        for text in ('a' * 128 + ' uMei1W9uyNo#q#q\n', 'fixture-import ' + canonical_tail + '\n'):
+            with self.subTest(text=text[:40]):
+                r = self.run_aliased(self.exit_image('fixture-import'), text)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn('ERROR: import aliases line 1: name too long', r.stderr)
+
+    def test_alias_name_of_127_bytes_is_accepted(self):
+        name = 'n' * 127
+        r = self.run_aliased(self.exit_image(name), f'{name} uMei1W9uyNo#q#q\n')
+        self.assertEqual(r.returncode, 7, r.stdout + r.stderr)
 
     def test_alias_file_comments_blank_lines_and_crlf_are_accepted(self):
         r = self.run_aliased(self.exit_image('fixture-import'),
@@ -168,8 +205,15 @@ class LoaderTests(unittest.TestCase):
 
     def test_illegal_instruction_reports_guest_offset(self):
         r = self.run_image(package(b'\x0f\x0b'))
-        self.assertEqual(r.returncode, 132)
-        self.assertIn('at guest offset 0x0,', r.stderr)
+        if WINDOWS:
+            # Measured on the CLANG64 build: the fault arrives as STATUS_ILLEGAL_INSTRUCTION (0xc000001d),
+            # the loader exits 139 (terminate(128 + 11)), and stderr says "rip ... guest offset 0x0" with
+            # no comma (src/win32_crash.c). The POSIX expectation below is unchanged.
+            self.assertEqual(r.returncode, 139, r.stdout + r.stderr)
+            self.assertIn('guest offset 0x0', r.stderr)
+        else:
+            self.assertEqual(r.returncode, 132)
+            self.assertIn('at guest offset 0x0,', r.stderr)
 
     def test_runtime_returns_from_verified_init_env(self):
         # Align stack, call _init_env through +32, then tail-jump to unknown +40.
@@ -192,6 +236,15 @@ class LoaderTests(unittest.TestCase):
         r = self.run_image(package(b'\xc3',capabilities=2))
         self.assertEqual(r.returncode,1)
         self.assertIn('unknown runtime capabilities',r.stderr)
+
+
+class ProbeGateTests(unittest.TestCase):
+    def test_built_loader_is_found_so_the_probe_tests_run(self):
+        # LoaderTests is skipped when EXE is missing. Fail if a loader is built under another name
+        # (for example the POSIX name on Windows), which would skip the probe suite silently.
+        built = [p for p in (ROOT / 'out/pes17recomp', ROOT / 'out/pes17recomp.exe') if p.exists()]
+        self.assertTrue(not built or EXE.exists(),
+                        f'{[str(p) for p in built]} built, but the probe tests look for {EXE}')
 
 
 if __name__ == '__main__':

@@ -163,13 +163,15 @@ class PrepareTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             prepare.prepare(game, out, title, resource_inventory=False, **kwargs)
 
-    def test_two_runs_give_identical_boot_bin(self):
+    def test_two_runs_give_identical_boot_bin_and_analysis(self):
         elf = synthetic_elf()
         game, title = self.game(elf), self.title(hashlib.md5(elf).hexdigest())
         self.run_prepare(game, self.tmp / 'a', title)
         self.run_prepare(game, self.tmp / 'b', title)
-        self.assertEqual((self.tmp / 'a' / 'boot.bin').read_bytes(),
-                         (self.tmp / 'b' / 'boot.bin').read_bytes())
+        for name in ('boot.bin', 'analysis.json', 'import-aliases.txt'):
+            with self.subTest(name=name):
+                self.assertEqual((self.tmp / 'a' / name).read_bytes(),
+                                 (self.tmp / 'b' / name).read_bytes())
 
     def test_missing_title_fails(self):
         script = ROOT / 'scripts' / 'prepare.py'
@@ -217,6 +219,27 @@ class PrepareTests(unittest.TestCase):
         title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
         self.assertEqual(self.alias_bytes(elf, title, 'out'),
                          b'Fake0000001#A#B Fake0000001#q#q\nFake0000002#A#B Fake0000002#q#q\n')
+
+    def test_alias_lines_follow_import_table_order_not_sorted_order(self):
+        # Table order is the order of first relocation: Fake... first, Dake... second (sorts before Fake).
+        elf = synthetic_elf(second_import=b'Dake0000002#A#B')
+        row = dict(suffix='#A#B', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        self.assertEqual(self.alias_bytes(elf, title, 'out'),
+                         b'Fake0000001#A#B Fake0000001#q#q\nDake0000002#A#B Dake0000002#q#q\n')
+
+    def test_only_three_part_import_names_take_a_suffix_row(self):
+        elf = synthetic_elf(second_import=b'Fake0000002#A#B#C')
+        row = dict(suffix='#A#B', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        self.assertEqual(self.alias_bytes(elf, title, 'out'), b'Fake0000001#A#B Fake0000001#q#q\n')
+
+    def test_suffix_row_with_wrong_part_count_is_rejected(self):
+        elf = synthetic_elf()
+        row = dict(suffix='#A#B#C', library='libsynth', module='modsynth', canonical='#q#q', evidence='test')
+        title = self.write_title(hashlib.md5(elf).hexdigest(), import_suffix_map=[row])
+        with self.assertRaisesRegex(ValueError, 'bad suffix syntax'):
+            self.run_prepare(self.game(elf), self.tmp / 'out', title)
 
     def test_suffix_row_must_match_decoded_library_and_module(self):
         elf = synthetic_elf()
