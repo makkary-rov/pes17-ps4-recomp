@@ -23,12 +23,22 @@ static void check_sha(const char *text, const char *expected) {
     if (strcmp(h, expected)) { fprintf(stderr, "sha256(\"%s\") = %s, expected %s\n", text, h, expected); abort(); }
 }
 
+static void check_repeat(size_t n, const char *expected) {
+    char text[80];
+    memset(text, 'a', n);
+    text[n] = 0;
+    check_sha(text, expected);
+}
+
 static void test_sha256(void) {
     check_sha("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     check_sha("abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    /* 56 bytes: the padding needs a second block */
+    /* padding boundaries: 55 bytes still fit one block, 56 and 63 need two, 64 is exactly one block + padding block */
     check_sha("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
               "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+    check_repeat(55, "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318");
+    check_repeat(63, "7d3e74a05d7db15bce4ad9ec0658ea98e3f06eeecf16b4c6fff2da457ddc2f34");
+    check_repeat(64, "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb");
 }
 
 static void test_patch(void) {

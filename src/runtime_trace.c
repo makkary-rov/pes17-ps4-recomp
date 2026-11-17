@@ -30,7 +30,8 @@ uint32_t pes_trace_parse(const char *spec) {
     for (const char *p = spec;; p++) {
         if (*p == ',' || *p == 0) {
             word[n] = 0;
-            if (!strcmp(word, "all")) mask = ~0u >> (32 - sizeof(subsystems) / sizeof(subsystems[0]));
+            if (!strcmp(word, "all"))
+                for (size_t i = 0; i < sizeof(subsystems) / sizeof(subsystems[0]); i++) mask |= subsystems[i].bit;
             for (size_t i = 0; i < sizeof(subsystems) / sizeof(subsystems[0]); i++)
                 if (!strcmp(word, subsystems[i].name)) mask |= subsystems[i].bit;
             n = 0;
@@ -71,11 +72,12 @@ void pes_trace_shutdown(void) {
 }
 
 void pes_trace_emit(uint32_t sub, const char *event, const char *fmt, ...) {
-    size_t index = 0;
+    size_t index = sizeof(subsystems) / sizeof(subsystems[0]);
     const char *name = "?";
     if (!out) return;
     for (size_t i = 0; i < sizeof(subsystems) / sizeof(subsystems[0]); i++)
         if (subsystems[i].bit == sub) { index = i; name = subsystems[i].name; }
+    if (index == sizeof(subsystems) / sizeof(subsystems[0])) return;   /* unknown subsystem: drop */
     if (++counts[index] > cap) {
         if (counts[index] == cap + 1) fprintf(out, "sub=%s ev=cap_reached cap=%lu\n", name, cap);
         return;
