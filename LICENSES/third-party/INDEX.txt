@@ -1,0 +1,13 @@
+gpu/shadps4/LICENSE - GPL-2.0
+gpu/third_party/sirit/LICENSE.txt - BSD-3-Clause
+gpu/third_party/sirit/externals/SPIRV-Headers/LICENSE - Khronos MIT-style
+gpu/third_party/half/LICENSE.txt - MIT
+gpu/third_party/fonts/LICENSE-DejaVu.txt - Bitstream Vera/DejaVu font licence
+gpu/third_party/gcn - AMD MIT-style header
+gpu/shadps4/video_core/host_shaders/fsr - AMD MIT-style header
+imgui (submodule, fetched, not in tree) - MIT
+FSR-Vulkan (submodule, fetched, not in tree) - MIT
+LibAtrac9 (submodule, fetched, not in tree) - MIT
+magic_enum (FetchContent) - MIT
+miniz (FetchContent) - MIT
+xbyak (FetchContent) - BSD-3-Clause

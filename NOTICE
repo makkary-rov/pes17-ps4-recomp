@@ -1,0 +1,9 @@
+(1) This work is licensed under GPL-2.0-or-later, see LICENSE.
+
+(2) It is derived from an upstream PS4 static-recompilation PC port (the "performance-stability-v2" public tree, imported 2026-11-17, upstream commit UNKNOWN: the source had no git metadata). Its notes are kept verbatim in LICENSES/upstream/.
+
+(3) Changes: files licensed GPL-3.0-or-later upstream, and one file of unverified licence, were not imported. Launcher, packaging, docs, mod/online tooling and diagnostics were removed. Files without a licence marker were given SPDX-License-Identifier: GPL-2.0-or-later.
+
+(4) Third-party components: see LICENSES/third-party/INDEX.txt.
+
+(5) This is not legal advice; a licence review is recommended.
