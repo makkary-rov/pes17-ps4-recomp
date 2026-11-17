@@ -316,6 +316,17 @@ static void report_exception(EXCEPTION_POINTERS *e) {
     fprintf(stderr, " (thread %lu %s)\n", GetCurrentThreadId(), thread_name);
     fprintf(stderr, "  rax=%016llx rbx=%016llx rcx=%016llx rdx=%016llx\n  rsi=%016llx rdi=%016llx rbp=%016llx rsp=%016llx\n",
             c->Rax, c->Rbx, c->Rcx, c->Rdx, c->Rsi, c->Rdi, c->Rbp, c->Rsp);
+    fprintf(stderr, "  r8=%016llx r9=%016llx r10=%016llx r11=%016llx\n  r12=%016llx r13=%016llx r14=%016llx r15=%016llx\n",
+            c->R8, c->R9, c->R10, c->R11, c->R12, c->R13, c->R14, c->R15);
+    {   /* the 32 code bytes around RIP (16 before, 16 from RIP): lets the faulting instruction be decoded offline */
+        unsigned char code[32];
+        SIZE_T got = 0;
+        if (ReadProcessMemory(GetCurrentProcess(), (void *)(uintptr_t)(c->Rip - 16), code, sizeof(code), &got) && got == sizeof(code)) {
+            fputs("  code[rip-16..rip+16]:", stderr);
+            for (size_t i = 0; i < sizeof(code); ++i) fprintf(stderr, " %02x", code[i]);
+            fputc('\n', stderr);
+        }
+    }
     /* rbp frame chain; ReadProcessMemory so a bad frame cannot fault again. */
     uintptr_t rbp = c->Rbp;
     for (int depth = 0; depth < 24 && rbp; ++depth) {
