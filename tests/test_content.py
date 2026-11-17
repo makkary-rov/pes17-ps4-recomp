@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-from paths import ROOT
+from paths import exe
 from pathlib import Path
 import struct
 import subprocess
@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import content_profile
 
-EXE=ROOT/'out/content-test'
+EXE=exe('content-test')
 
 class ProfileTests(unittest.TestCase):
     def test_sfo_parameters_and_explicit_trial_profile(self):
@@ -25,7 +25,7 @@ class ProfileTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'invalid user-defined'):
                     content_profile.prepare(p,p)
 
-@unittest.skipUnless(EXE.exists(),'run bash build.sh --test first')
+@unittest.skipUnless(EXE.exists(),f'{EXE} is missing (run bash build.sh --test first)')
 class ContentTests(unittest.TestCase):
     def run_case(self,*args):
         return subprocess.run([str(EXE.resolve()),*args],stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=5)

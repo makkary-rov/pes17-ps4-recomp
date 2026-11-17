@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-from paths import ROOT
+from paths import exe
 from pathlib import Path
 import subprocess
 import unittest
 
-EXE=ROOT/'out/sema-test'
+EXE=exe('sema-test')
 
-@unittest.skipUnless(EXE.exists(),'run bash build.sh --test first')
+@unittest.skipUnless(EXE.exists(),f'{EXE} is missing (run bash build.sh --test first)')
 class SemaphoreTests(unittest.TestCase):
     def run_case(self,*args):
         return subprocess.run([str(EXE.resolve()),*args],stdin=subprocess.DEVNULL,capture_output=True,text=True,timeout=10)
