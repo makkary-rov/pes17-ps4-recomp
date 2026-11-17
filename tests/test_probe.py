@@ -348,13 +348,13 @@ class LoaderTests(unittest.TestCase):
 
     def test_progname_data_import_resolves_to_a_host_variable(self):
         # libkernel's __progname: libc.prx writes through its address during startup.
-        data = package(b'\x0f\x0b', [(16, 2, 0, 0)], ['djxxOmW6-aw#3#D'], capabilities=1)
+        data = package(b'\x0f\x0b', [(16, 2, 0, 0)], ['djxxOmW6-aw#p#J'], capabilities=1)
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / 'imports.tsv'
             r = self.run_image(data, '--stop-before-entry', '--import-report', str(report))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             rows = report.read_bytes().decode('ascii').splitlines()
-        self.assertTrue(rows[1].startswith('0\tdjxxOmW6-aw#3#D\tdata\tdjxxOmW6-aw#3#D\thost\t'), rows[1])
+        self.assertTrue(rows[1].startswith('0\tdjxxOmW6-aw#p#J\tdata\tdjxxOmW6-aw#p#J\thost\t'), rows[1])
 
     def test_import_report_looked_up_name_is_the_alias_canonical_name(self):
         data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['fixture-import'], capabilities=1)

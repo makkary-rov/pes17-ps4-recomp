@@ -211,7 +211,7 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
         if (!strcmp(name, "ZT4ODD2Ts9o#libSceLibcInternal")) return (uintptr_t)&need_libc_internal;
         /* __progname (libkernel data): libc clears it during startup and sets it from argv[0]. */
         static char *progname_variable = NULL;
-        if (!strcmp(name, "djxxOmW6-aw#3#D")) return (uintptr_t)&progname_variable;
+        if (!strcmp(name, "djxxOmW6-aw#p#J")) return (uintptr_t)&progname_variable;   /* canonical name: the title config aliases #3#D to it */
         return 0;
     }
     /* Exact scoped imports of the upstream title (G-50 moves them to the title config); the suffix identifies library/module. */
