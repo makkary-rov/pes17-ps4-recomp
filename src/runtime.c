@@ -48,11 +48,19 @@ static ABI void guest_set_heap_api(void **api) {
     puts("Runtime: application heap API registered");
 }
 void **runtime_application_heap_api(void) { return application_heap_api; }
-/* sceLibcHeapGetTraceInfo(info): libc asks the heap-trace service for its state. The runtime keeps no heap
-   trace, so it reports EINVAL (22) and leaves the caller's structure untouched. */
+/* sceLibcHeapGetTraceInfo(info): libc's startup passes a 32-byte structure and then reads two output
+   pointers from it (+0x10 and +0x18) and writes through them: it clears the first and stores its own
+   heap-state pointer through the second (found by disassembling libc.prx startup). The runtime keeps no
+   heap trace; it hands out two writable slots, reports "no trace flags" (+0x0c = 0) and succeeds. */
 static ABI int guest_heap_trace_info(void *info) {
-    (void)info;
-    return 22;
+    static uint64_t slot_cleared, slot_published;
+    if (!info) return 22;
+    unsigned char *p = info;
+    memset(p + 0x0c, 0, 4);
+    void *a = &slot_cleared, *b = &slot_published;
+    memcpy(p + 0x10, &a, sizeof(a));
+    memcpy(p + 0x18, &b, sizeof(b));
+    return 0;
 }
 void runtime_set_module_tls(uint64_t module, const void *data, uint64_t filesz, uint64_t memsz) {
     if (module<2 || module>=TLS_MODULES) { fputs("STOP: unsupported TLS module id\n",stderr); exit(21); }
