@@ -51,8 +51,9 @@ class RealConfigTests(unittest.TestCase):
         self.assertEqual(data["expect"], {"entry": "0x910", "relocations_written": 184284,
                                           "imports": 828})
         self.assertEqual(data["gnm_region"], {"lo": 0x274B000, "hi": 0x276A000})
-        self.assertEqual(data["import_suffix_map"], [])
-        self.assertEqual(data["import_aliases"], [])
+        # Rows from the run #1 measurement (scripts/suggest_suffix_map.py, see impl-report-t7.md).
+        self.assertEqual(len(data["import_suffix_map"]), 25)
+        self.assertEqual(len(data["import_aliases"]), 87)
 
 
 class ValidConfigTests(unittest.TestCase):

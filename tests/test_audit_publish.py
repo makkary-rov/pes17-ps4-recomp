@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
+import subprocess
 import unittest
+from unittest import mock
 
 from paths import ROOT  # noqa: F401  (puts scripts/ on sys.path)
 import audit_publish as ap
@@ -77,6 +79,27 @@ class PatternTests(unittest.TestCase):
         self.assertTrue(ap.P.search(SL2))
         self.assertTrue(ap.Q.search(BAD_UNDERSCORE))
         self.assertFalse(ap.Q.search('SUBB_U32'))
+
+
+class GitStdinTests(unittest.TestCase):
+    # Regression: with no usable console stdin, Windows Python raises WinError 6 unless stdin is given.
+    def test_git_helpers_pass_devnull_stdin(self):
+        calls = []
+
+        class Done:
+            stdout = b''
+
+        def fake_run(args, **kwargs):
+            calls.append((args, kwargs))
+            return Done()
+
+        with mock.patch.object(ap.subprocess, 'run', side_effect=fake_run):
+            ap.git_files()
+            ap.commit_messages()
+        self.assertEqual(len(calls), 3)
+        for args, kwargs in calls:
+            with self.subTest(args=args):
+                self.assertIs(kwargs.get('stdin'), subprocess.DEVNULL)
 
 
 if __name__ == '__main__':

@@ -93,14 +93,14 @@ def parse_allowlist(md):
 def git_files():
     found = set()
     for args in (["git", "ls-files", "-z"], ["git", "ls-files", "-z", "--others", "--exclude-standard"]):
-        out = subprocess.run(args, cwd=ROOT, capture_output=True, check=True).stdout
+        out = subprocess.run(args, cwd=ROOT, stdin=subprocess.DEVNULL, capture_output=True, check=True).stdout
         found.update(p.decode("utf-8", "replace") for p in out.split(b"\0") if p)
     return sorted(found)
 
 
 def commit_messages():
     out = subprocess.run(["git", "log", "--all", "--format=%H%x1f%B%x00"], cwd=ROOT,
-                         capture_output=True, check=True).stdout
+                         stdin=subprocess.DEVNULL, capture_output=True, check=True).stdout
     commits = []
     for record in out.decode("utf-8", "replace").split("\0"):
         if not record.strip():

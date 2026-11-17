@@ -13,6 +13,705 @@
     "lo": 41201664,
     "hi": 41328640
   },
-  "import_suffix_map": [],
-  "import_aliases": []
+  "import_suffix_map": [
+    {
+      "suffix": "#4#2",
+      "library": "libc",
+      "module": "libc",
+      "canonical": "#q#q",
+      "evidence": "same-hash rows: 12"
+    },
+    {
+      "suffix": "#A#B",
+      "library": "libSceAppContent",
+      "module": "libSceAppContentUtil",
+      "canonical": "#c#d",
+      "evidence": "same-hash rows: 2"
+    },
+    {
+      "suffix": "#B#C",
+      "library": "libSceCommonDialog",
+      "module": "libSceCommonDialog",
+      "canonical": "#Z#a",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "suffix": "#I#J",
+      "library": "libSceImeDialog",
+      "module": "libSceImeDialog",
+      "canonical": "#b#c",
+      "evidence": "same-hash rows: 5"
+    },
+    {
+      "suffix": "#K#L",
+      "library": "libSceMsgDialog",
+      "module": "libSceMsgDialog",
+      "canonical": "#j#k",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#L#M",
+      "library": "libScePad",
+      "module": "libScePad",
+      "canonical": "#A#B",
+      "evidence": "same-hash rows: 8"
+    },
+    {
+      "suffix": "#M#N",
+      "library": "libScePlayGo",
+      "module": "libScePlayGo",
+      "canonical": "#n#o",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#O#O",
+      "library": "libSceRtc",
+      "module": "libSceRtc",
+      "canonical": "#H#I",
+      "evidence": "same-hash rows: 6"
+    },
+    {
+      "suffix": "#P#P",
+      "library": "libSceSaveData",
+      "module": "libSceSaveData",
+      "canonical": "#O#P",
+      "evidence": "same-hash rows: 6"
+    },
+    {
+      "suffix": "#Q#Q",
+      "library": "libSceSaveDataDialog",
+      "module": "libSceSaveDataDialog",
+      "canonical": "#d#e",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#U#U",
+      "library": "libSceSysmodule",
+      "module": "libSceSysmodule",
+      "canonical": "#M#N",
+      "evidence": "same-hash rows: 3"
+    },
+    {
+      "suffix": "#V#V",
+      "library": "libSceSystemService",
+      "module": "libSceSystemService",
+      "canonical": "#V#W",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#W#W",
+      "library": "libSceUserService",
+      "module": "libSceUserService",
+      "canonical": "#D#E",
+      "evidence": "same-hash rows: 6"
+    },
+    {
+      "suffix": "#a#a",
+      "library": "libSceNpAuth",
+      "module": "libSceNpAuth",
+      "canonical": "#X#Y",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#b#b",
+      "library": "libSceNpCommerce",
+      "module": "libSceNpCommerce",
+      "canonical": "#k#l",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#c#c",
+      "library": "libSceNpCommon",
+      "module": "libSceNpCommon",
+      "canonical": "#Q#R",
+      "evidence": "same-hash rows: 2"
+    },
+    {
+      "suffix": "#e#e",
+      "library": "libSceNpManager",
+      "module": "libSceNpManager",
+      "canonical": "#R#S",
+      "evidence": "same-hash rows: 16"
+    },
+    {
+      "suffix": "#h#h",
+      "library": "libSceNpProfileDialog",
+      "module": "libSceNpProfileDialog",
+      "canonical": "#h#i",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#n#m",
+      "library": "libSceNpTrophy",
+      "module": "libSceNpTrophy",
+      "canonical": "#l#m",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#r#q",
+      "library": "libSceNetCtl",
+      "module": "libSceNetCtl",
+      "canonical": "#J#K",
+      "evidence": "same-hash rows: 4"
+    },
+    {
+      "suffix": "#s#r",
+      "library": "libSceNet",
+      "module": "libSceNet",
+      "canonical": "#E#F",
+      "evidence": "same-hash rows: 23"
+    },
+    {
+      "suffix": "#t#s",
+      "library": "libSceHttp",
+      "module": "libSceHttp",
+      "canonical": "#K#L",
+      "evidence": "same-hash rows: 23"
+    },
+    {
+      "suffix": "#u#t",
+      "library": "libSceSsl",
+      "module": "libSceSsl",
+      "canonical": "#L#M",
+      "evidence": "same-hash rows: 2"
+    },
+    {
+      "suffix": "#w#v",
+      "library": "libSceVoice",
+      "module": "libSceVoice",
+      "canonical": "#i#j",
+      "evidence": "same-hash rows: 10"
+    },
+    {
+      "suffix": "#z#y",
+      "library": "libSceAudioOut",
+      "module": "libSceAudioOut",
+      "canonical": "#G#H",
+      "evidence": "same-hash rows: 5"
+    }
+  ],
+  "import_aliases": [
+    {
+      "import": "Ou3iL1abvng#3#D",
+      "canonical": "Ou3iL1abvng#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "vNe1w4diLCs#3#D",
+      "canonical": "vNe1w4diLCs#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "UK2Tl2DWUns#3#D",
+      "canonical": "UK2Tl2DWUns#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "ejekcaNQNq0#3#D",
+      "canonical": "ejekcaNQNq0#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "1G3lF1Gg1k8#3#D",
+      "canonical": "1G3lF1Gg1k8#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "Cg4srZ6TKbU#3#D",
+      "canonical": "Cg4srZ6TKbU#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "eV9wAD2riIA#3#D",
+      "canonical": "eV9wAD2riIA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "4wSze92BhLI#3#D",
+      "canonical": "4wSze92BhLI#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "rTXw65xmLIA#3#D",
+      "canonical": "rTXw65xmLIA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "pO96TwzOm5E#3#D",
+      "canonical": "pO96TwzOm5E#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "L-Q3LEjIbgA#3#D",
+      "canonical": "L-Q3LEjIbgA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "cQke9UuBQOk#3#D",
+      "canonical": "cQke9UuBQOk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "MBuItvba6z8#3#D",
+      "canonical": "MBuItvba6z8#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "7oxv3PPCumo#3#D",
+      "canonical": "7oxv3PPCumo#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "rVjRvHJ0X6c#3#D",
+      "canonical": "rVjRvHJ0X6c#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "cmo1RIYva9o#3#D",
+      "canonical": "cmo1RIYva9o#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "9UK1vLZQft4#3#D",
+      "canonical": "9UK1vLZQft4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "tn3VlD0hG60#3#D",
+      "canonical": "tn3VlD0hG60#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "smWEktiyyG0#3#D",
+      "canonical": "smWEktiyyG0#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "F8bUHwAG284#3#D",
+      "canonical": "F8bUHwAG284#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "1FGvU0i9saQ#3#D",
+      "canonical": "1FGvU0i9saQ#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "iMp8QpE+XO4#3#D",
+      "canonical": "iMp8QpE+XO4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "9BcDykPmo1I#3#D",
+      "canonical": "9BcDykPmo1I#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "kDh-NfxgMtE#3#D",
+      "canonical": "kDh-NfxgMtE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "WKAXJ4XBPQ4#3#D",
+      "canonical": "WKAXJ4XBPQ4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "aI+OeCz8xrQ#3#D",
+      "canonical": "aI+OeCz8xrQ#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "bt3CTBKmGyI#3#D",
+      "canonical": "bt3CTBKmGyI#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "1jfXLRVzisc#3#D",
+      "canonical": "1jfXLRVzisc#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "JGgj7Uvrl+A#3#D",
+      "canonical": "JGgj7Uvrl+A#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "g+PZd2hiacg#3#D",
+      "canonical": "g+PZd2hiacg#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "2Tb92quprl0#3#D",
+      "canonical": "2Tb92quprl0#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "2Of0f+3mhhE#3#D",
+      "canonical": "2Of0f+3mhhE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "3PtV6p3QNX4#3#D",
+      "canonical": "3PtV6p3QNX4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "nsYoNRywwNg#3#D",
+      "canonical": "nsYoNRywwNg#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "3qxgM4ezETA#3#D",
+      "canonical": "3qxgM4ezETA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "UTXzJbWhhTE#3#D",
+      "canonical": "UTXzJbWhhTE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "6UgtwV+0zb4#3#D",
+      "canonical": "6UgtwV+0zb4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "onNY9Byn-W8#3#D",
+      "canonical": "onNY9Byn-W8#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "W0Hpm2X0uPE#3#D",
+      "canonical": "W0Hpm2X0uPE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "T72hz6ffq08#3#D",
+      "canonical": "T72hz6ffq08#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "4J2sUJmuHZQ#3#D",
+      "canonical": "4J2sUJmuHZQ#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "-2IRUCO--PM#3#D",
+      "canonical": "-2IRUCO--PM#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "upoVrzMHFeE#3#D",
+      "canonical": "upoVrzMHFeE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "kBwCPsYX-m4#3#D",
+      "canonical": "kBwCPsYX-m4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "1-LFLmRFxxM#3#D",
+      "canonical": "1-LFLmRFxxM#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "+r3rMFwItV4#3#D",
+      "canonical": "+r3rMFwItV4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "nKWi-N2HBV4#3#D",
+      "canonical": "nKWi-N2HBV4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "52NcYU9+lEo#3#D",
+      "canonical": "52NcYU9+lEo#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "naInUjYt3so#3#D",
+      "canonical": "naInUjYt3so#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "AUXVxWeJU-A#3#D",
+      "canonical": "AUXVxWeJU-A#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "62KCwEMmzcM#3#D",
+      "canonical": "62KCwEMmzcM#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "3kg7rT0NQIs#3#D",
+      "canonical": "3kg7rT0NQIs#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "fTx66l5iWIA#3#D",
+      "canonical": "fTx66l5iWIA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "VW3TVZiM4-E#3#D",
+      "canonical": "VW3TVZiM4-E#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "oib76F-12fk#3#D",
+      "canonical": "oib76F-12fk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "188x57JYp0g#3#D",
+      "canonical": "188x57JYp0g#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "R1Jvn8bSCW8#3#D",
+      "canonical": "R1Jvn8bSCW8#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "4czppHBiriw#3#D",
+      "canonical": "4czppHBiriw#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "Zxa0VhQVTsk#3#D",
+      "canonical": "Zxa0VhQVTsk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "-Wreprtu0Qs#3#D",
+      "canonical": "-Wreprtu0Qs#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "eXbUSpEaTsA#3#D",
+      "canonical": "eXbUSpEaTsA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "DzES9hQF4f4#3#D",
+      "canonical": "DzES9hQF4f4#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "4+h9EzwKF4I#3#D",
+      "canonical": "4+h9EzwKF4I#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "BmMjYxmew1w#3#D",
+      "canonical": "BmMjYxmew1w#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "eoht7mQOCmo#3#D",
+      "canonical": "eoht7mQOCmo#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "geDaqgH9lTg#3#D",
+      "canonical": "geDaqgH9lTg#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "PrdHuuDekhY#3#D",
+      "canonical": "PrdHuuDekhY#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "+BzXYkqYeLE#3#D",
+      "canonical": "+BzXYkqYeLE#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "QBi7HCK03hw#3#D",
+      "canonical": "QBi7HCK03hw#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "12wOHk8ywb0#3#D",
+      "canonical": "12wOHk8ywb0#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "4qGrR6eoP9Y#3#D",
+      "canonical": "4qGrR6eoP9Y#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "IafI2PxcPnQ#3#D",
+      "canonical": "IafI2PxcPnQ#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "1tKyG7RlMJo#3#D",
+      "canonical": "1tKyG7RlMJo#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "BB+kb08Tl9A#3#D",
+      "canonical": "BB+kb08Tl9A#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "6ULAa0fq4jA#3#D",
+      "canonical": "6ULAa0fq4jA#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "Ox9i0c7L5w0#3#D",
+      "canonical": "Ox9i0c7L5w0#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "iPtZRWICjrM#3#D",
+      "canonical": "iPtZRWICjrM#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "adh--6nIqTk#3#D",
+      "canonical": "adh--6nIqTk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "XD3mDeybCnk#3#D",
+      "canonical": "XD3mDeybCnk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "bIHoZCTomsI#3#D",
+      "canonical": "bIHoZCTomsI#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "+L98PIbGttk#3#D",
+      "canonical": "+L98PIbGttk#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "mqdNorrB+gI#3#D",
+      "canonical": "mqdNorrB+gI#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "BC+OG5m9+bw#3#D",
+      "canonical": "BC+OG5m9+bw#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "rcrVFJsQWRY#3#D",
+      "canonical": "rcrVFJsQWRY#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "f7uOxY9mM1U#3#D",
+      "canonical": "f7uOxY9mM1U#p#J",
+      "reason": "suffix #3#D conflict: imports already resolve by name: 3",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "HoLVWNanBBc#N#D",
+      "canonical": "HoLVWNanBBc#p#J",
+      "reason": "suffix #N#D conflict: prefix candidates disagree: #I#J, #p#J",
+      "evidence": "same-hash rows: 1"
+    },
+    {
+      "import": "NN01qLRhiqU#N#D",
+      "canonical": "NN01qLRhiqU#I#J",
+      "reason": "suffix #N#D conflict: prefix candidates disagree: #I#J, #p#J",
+      "evidence": "same-hash rows: 1"
+    }
+  ]
 }

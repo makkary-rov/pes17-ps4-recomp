@@ -92,12 +92,14 @@ function Run-Native {
         $psi.UseShellExecute = $false
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
+        $psi.RedirectStandardInput = $true
         $psi.CreateNoWindow = $true
         $psi.WorkingDirectory = $WorkDir
         foreach ($k in $EnvVars.Keys) { $psi.EnvironmentVariables[$k] = [string]$EnvVars[$k] }
         $p = New-Object Diagnostics.Process
         $p.StartInfo = $psi
         [void]$p.Start()
+        $p.StandardInput.Close()
         $outTask = $p.StandardOutput.ReadToEndAsync()
         $errTask = $p.StandardError.ReadToEndAsync()
         if ($p.WaitForExit($TimeoutMs)) {
@@ -195,7 +197,8 @@ if ($RootMatch.Success) {
 }
 
 function Run-Msys([string]$Command, [string]$LogFile, [int]$TimeoutMs = 3600000) {
-    return Run-Native -Exe $Bash -ArgList @('-lc', ("cd '" + $PosixRepo + "' && " + $Command)) -LogFile $LogFile -TimeoutMs $TimeoutMs -EnvVars @{ MSYSTEM = 'CLANG64'; CHERE_INVOKING = '1' }
+    # stdin of every MSYS2 command is /dev/null: with no console stdin, Windows Python raises WinError 6 in subprocess.
+    return Run-Native -Exe $Bash -ArgList @('-lc', ("cd '" + $PosixRepo + "' && ( " + $Command + " ) < /dev/null")) -LogFile $LogFile -TimeoutMs $TimeoutMs -EnvVars @{ MSYSTEM = 'CLANG64'; CHERE_INVOKING = '1' }
 }
 
 # objdump for the region disassembly must be GNU objdump (-b binary, --insn-width, GNU Intel syntax as

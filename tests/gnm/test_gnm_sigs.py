@@ -33,7 +33,7 @@ class GnmSigsTests(unittest.TestCase):
             asm.write_text(LISTING)
             cg.write_text(CALLGRAPH)
             res = subprocess.run([sys.executable, str(SCRIPT), str(asm), str(cg)],
-                                 capture_output=True, text=True)
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stderr)
             sigs = {}
             for line in res.stdout.splitlines():

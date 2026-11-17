@@ -57,7 +57,7 @@ class CallgraphTests(unittest.TestCase):
             out = Path(tmp) / 'cg.txt'
             elf.write_bytes(build_elf())
             res = subprocess.run([sys.executable, str(SCRIPT), str(elf), hex(lo), hex(hi), str(out)],
-                                 capture_output=True, text=True)
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True)
             self.assertEqual(res.returncode, 0, res.stderr)
             rows = {}
             for line in out.read_text().splitlines():

@@ -91,7 +91,7 @@ class GenGnmTableTests(unittest.TestCase):
         if region is not None:
             args += ['--region', region]
         args += [*extra, '-o', str(self.out), str(self.asm), str(self.cg), str(self.sigs)]
-        return subprocess.run(args, capture_output=True, text=True)
+        return subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, text=True)
 
     def test_region_is_required(self):
         self.assertNotEqual(self.run_gen(region=None).returncode, 0)

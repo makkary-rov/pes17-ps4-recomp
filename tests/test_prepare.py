@@ -177,7 +177,7 @@ class PrepareTests(unittest.TestCase):
         script = ROOT / 'scripts' / 'prepare.py'
         result = subprocess.run([sys.executable, str(script), str(self.game(synthetic_elf())),
                                  '--out', str(self.tmp / 'out'), '--no-resource-inventory'],
-                                capture_output=True, text=True)
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('--title', result.stderr)
 
