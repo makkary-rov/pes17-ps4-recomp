@@ -1,0 +1,15 @@
+{
+  "_license": "GPL-2.0-or-later",
+  "schema": "pes-title-1",
+  "title_id": "CUSA04957",
+  "save_title_id": "CUSA04957",
+  "eboot_elf_md5": "5213cf72d23f5bc6f3728f45091dea0c",
+  "expect": {
+    "entry": "0x910",
+    "relocations_written": 184284,
+    "imports": 828
+  },
+  "gnm_region": null,
+  "import_suffix_map": [],
+  "import_aliases": []
+}
