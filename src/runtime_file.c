@@ -47,7 +47,14 @@ typedef struct {
 _Static_assert(sizeof(GuestStat)==120,"FreeBSD stat layout");
 
 typedef struct { char *names; size_t count, *offsets; unsigned char *types; } Listing;
-typedef struct { int used, host; Listing *dir; size_t position; char path[512]; } File;
+typedef struct {
+    int used, host;
+    Listing *dir;
+    size_t position;
+    int64_t file_pos;
+    HostMutex file_lock;
+    char path[512];
+} File;
 typedef struct { char guest[64]; char host[512]; } Mount;
 static File files[MAX_FILES];
 static Mount mounts[MAX_MOUNTS];
@@ -110,6 +117,24 @@ static int translate(const char *guest,char *out,size_t size) {
     if (!m) result=ENOENT;
     else if ((size_t)snprintf(out,size,"%s%s",m->host,buffer+best)>=size) result=ENAMETOOLONG;
     host_unlock(&lock);
+    /* PES 2017: If a file requested in /download0 does not exist, fall back to /app0 */
+    if (result==0 && !strncmp(buffer, "/download0/", sizeof("/download0/") - 1)) {
+        HostStat st;
+        if (host_stat(out, &st) != 0) {
+            host_lock(&lock);
+            for (size_t i = 0; i < mount_count; ++i) {
+                if (!strcmp(mounts[i].guest, "/app0")) {
+                    char fallback[512];
+                    snprintf(fallback, sizeof(fallback), "%s%s", mounts[i].host, buffer + 10);
+                    if (host_stat(fallback, &st) == 0) {
+                        snprintf(out, size, "%s", fallback);
+                    }
+                    break;
+                }
+            }
+            host_unlock(&lock);
+        }
+    }
     if (result==ENOENT) fprintf(stderr,"Runtime: no mount for guest path %s\n",guest);
     return result;
 }
@@ -192,6 +217,7 @@ static File *get(int fd) {
 }
 /* PES_AUDIO_TRACE=1: sound file opens and failed reads (missing game sounds). */
 static int audio_trace(void) { static int v=-1; if (v<0) { const char *e=getenv("PES_AUDIO_TRACE"); v=e && e[0]=='1'; } return v; }
+static int file_trace(void) { static int v=-1; if (v<0) { const char *e=getenv("PES_FILE_TRACE"); v=e && e[0]=='1'; } return v; }
 /* Game mounts (including linked mod overlays) are read-only. Saves use other mounts. */
 static int game_path(const char *p) {
     if (!p || !*p) return 0;
@@ -219,7 +245,8 @@ static int64_t do_open(const char *guest,int flags,int mode) {
     host=open(path,host_flags(flags),mode ? mode : 0644);
     if (host<0) {
         e=errno;
-        if (e==ENOENT) { ++missing; printf("Runtime: open(%s) -> not found\n",guest); }
+        printf("Runtime: open(%s [%s]) failed errno %d (thread '%s')\n", guest, path, e, runtime_thread_get_name());
+        if (e==ENOENT) ++missing;
         return -e;
     }
     if (!host_fstat(host,&s) && S_ISDIR(s.st_mode)) dir=list_directory(path);
@@ -228,9 +255,11 @@ static int64_t do_open(const char *guest,int flags,int mode) {
     int fd=-1;
     for (int i=3;i<MAX_FILES;++i) if (!files[i].used) { fd=i; break; }
     if (fd<0) { host_unlock(&lock); if (host>=0) close(host); free_listing(dir); return -EMFILE; }
-    files[fd]=(File){.used=1,.host=host,.dir=dir};
+    files[fd]=(File){.used=1,.host=host,.dir=dir,.file_pos=0};
+    host_mutex_init(&files[fd].file_lock);
     snprintf(files[fd].path,sizeof(files[fd].path),"%s",guest);
     ++opens;
+    printf("Runtime: file_open(%s) -> fd %d (thread '%s')\n", guest, fd, runtime_thread_get_name());
     host_unlock(&lock);
     if (audio_trace() && strstr(guest,"sound/")) printf("Audio trace: open(%s) -> fd %d, %lld bytes\n",guest,fd,(long long)s.st_size);
     const char *mod_trace=getenv("PES_MOD_TRACE"), *mod_root=getenv("PES_MODS_DIR");
@@ -251,8 +280,10 @@ static int64_t do_close(int fd) {
     host_lock(&lock);
     File *f=get(fd);
     if (!f) { host_unlock(&lock); return -EBADF; }
+    host_lock(&f->file_lock);
     if (f->host>=0) close(f->host);
     free_listing(f->dir);
+    host_unlock(&f->file_lock);
     *f=(File){0};
     host_unlock(&lock);
     return 0;
@@ -274,52 +305,120 @@ static void touch_for_write(void *buffer,uint64_t size) {
     }
 }
 static int64_t do_read(int fd,void *buffer,uint64_t size) {
-    int h=host_fd(fd);
-    if (h<0) return get(fd) ? -EISDIR : -EBADF;
+    File *f=get(fd);
+    if (!f) return -EBADF;
+    if (f->host<0) return f->dir ? -EISDIR : -EBADF;
+    if ((int64_t)size < 0 || size > 0x7FFFFFFF) return -EINVAL;
     runtime_memory_note_write((uintptr_t)buffer,size);
     touch_for_write(buffer,size);
-    ssize_t n=read(h,buffer,size);
-    if (n<0) { if (audio_trace()) printf("Audio trace: read(fd %d, %llu) failed, errno %d\n",fd,(unsigned long long)size,errno); return -errno; }
-    if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n); /* and once the data is there */
+
+    host_lock(&f->file_lock);
+    int64_t pos = f->file_pos;
+    ssize_t n = pread(f->host, buffer, size, pos);
+    if (n > 0) f->file_pos += n;
+    host_unlock(&f->file_lock);
+
+    if (n < 0) {
+        printf("Runtime: read(fd %d [%s], %llu @ %lld) failed, errno %d (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)pos, errno, runtime_thread_get_name());
+        return -errno;
+    }
+    if (file_trace() || (n == 0 && size > 0)) {
+        printf("Runtime: read(fd %d [%s], %llu @ %lld) -> %lld (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)pos, (long long)n, runtime_thread_get_name());
+    }
+    if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n);
     __atomic_add_fetch(&reads,1,__ATOMIC_RELAXED); __atomic_add_fetch(&bytes_read,(uint64_t)n,__ATOMIC_RELAXED);
     return n;
 }
 static int64_t do_pread(int fd,void *buffer,uint64_t size,int64_t offset) {
-    int h=host_fd(fd);
-    if (h<0) return get(fd) ? -EISDIR : -EBADF;
+    File *f=get(fd);
+    if (!f) return -EBADF;
+    if (f->host<0) return f->dir ? -EISDIR : -EBADF;
+    if ((int64_t)size < 0 || size > 0x7FFFFFFF) return -EINVAL;
+    if (offset < 0) return -EINVAL;
     runtime_memory_note_write((uintptr_t)buffer,size);
     touch_for_write(buffer,size);
-    ssize_t n=pread(h,buffer,size,offset);
-    if (n<0) { if (audio_trace()) printf("Audio trace: pread(fd %d, %llu @%lld) failed, errno %d\n",fd,(unsigned long long)size,(long long)offset,errno); return -errno; }
-    if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n); /* and once the data is there */
+
+    ssize_t n = pread(f->host, buffer, size, offset);
+    if (n < 0) {
+        printf("Runtime: pread(fd %d [%s], %llu @ %lld) failed, errno %d (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)offset, errno, runtime_thread_get_name());
+        return -errno;
+    }
+    if (file_trace() || (n == 0 && size > 0)) {
+        printf("Runtime: pread(fd %d [%s], %llu @ %lld) -> %lld (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)offset, (long long)n, runtime_thread_get_name());
+    }
+    if (n>0) runtime_memory_note_write((uintptr_t)buffer,(uint64_t)n);
     __atomic_add_fetch(&reads,1,__ATOMIC_RELAXED); __atomic_add_fetch(&bytes_read,(uint64_t)n,__ATOMIC_RELAXED);
     return n;
 }
 static int64_t do_write(int fd,const void *buffer,uint64_t size) {
-    int h=host_fd(fd);
-    if (h<0) return -EBADF;
-    ssize_t n=write(h,buffer,size);
+    File *f=get(fd);
+    if (!f || f->host<0) return -EBADF;
+    if ((int64_t)size < 0 || size > 0x7FFFFFFF) return -EINVAL;
+    host_lock(&f->file_lock);
+    int64_t pos = f->file_pos;
+    ssize_t n=pwrite(f->host,buffer,size,pos);
+    if (n>0) f->file_pos += n;
+    host_unlock(&f->file_lock);
+    if (file_trace()) {
+        printf("Runtime: write(fd %d [%s], %llu @ %lld) -> %lld (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)pos, (long long)n, runtime_thread_get_name());
+    }
     if (n<0) return -errno;
     __atomic_add_fetch(&writes,1,__ATOMIC_RELAXED);
     return n;
 }
 static int64_t do_pwrite(int fd,const void *buffer,uint64_t size,int64_t offset) {
-    int h=host_fd(fd);
-    if (h<0) return -EBADF;
-    ssize_t n=pwrite(h,buffer,size,offset);
-    return n<0 ? -errno : n;
+    File *f=get(fd);
+    if (!f || f->host<0) return -EBADF;
+    if ((int64_t)size < 0 || size > 0x7FFFFFFF) return -EINVAL;
+    if (offset < 0) return -EINVAL;
+    ssize_t n=pwrite(f->host,buffer,size,offset);
+    if (file_trace()) {
+        printf("Runtime: pwrite(fd %d [%s], %llu @ %lld) -> %lld (thread '%s')\n",
+               fd, f->path, (unsigned long long)size, (long long)offset, (long long)n, runtime_thread_get_name());
+    }
+    if (n<0) return -errno;
+    __atomic_add_fetch(&writes,1,__ATOMIC_RELAXED);
+    return n;
 }
 static int64_t do_lseek(int fd,int64_t offset,int whence) {
     File *f=get(fd);
     if (!f) return -EBADF;
     if (whence<0 || whence>2) return -EINVAL;
     if (f->dir) {
-        /* Directory offsets are entry indices for getdirentries. */
         if (whence==0 && offset>=0) { f->position=(size_t)offset; return offset; }
         return -EINVAL;
     }
-    int64_t r=lseek(f->host,offset,whence);
-    return r<0 ? -errno : r;
+    host_lock(&f->file_lock);
+    int64_t target = f->file_pos;
+    if (whence == 0) {
+        target = offset;
+    } else if (whence == 1) {
+        target += offset;
+    } else if (whence == 2) {
+        HostStat s;
+        if (host_fstat(f->host, &s)) {
+            host_unlock(&f->file_lock);
+            return -errno;
+        }
+        target = (int64_t)s.st_size + offset;
+    }
+    if (target < 0) {
+        host_unlock(&f->file_lock);
+        return -EINVAL;
+    }
+    f->file_pos = target;
+    host_unlock(&f->file_lock);
+
+    if (file_trace()) {
+        printf("Runtime: lseek(fd %d [%s], %lld, whence %d) -> %lld (thread '%s')\n",
+               fd, f->path, (long long)offset, whence, (long long)target, runtime_thread_get_name());
+    }
+    return target;
 }
 static int64_t do_stat(const char *guest,GuestStat *out);
 static int64_t do_fstat(int fd,GuestStat *out) {
@@ -330,15 +429,24 @@ static int64_t do_fstat(int fd,GuestStat *out) {
     }
     if (!out) return -EFAULT;
     HostStat s;
-    if (host_fstat(h,&s)) return -errno;
-    convert_stat(&s,out); return 0;
+    if (host_fstat(h,&s)) {
+        if (file_trace()) printf("Runtime: fstat(fd %d) failed errno %d (thread '%s')\n", fd, errno, runtime_thread_get_name());
+        return -errno;
+    }
+    convert_stat(&s,out);
+    if (file_trace()) printf("Runtime: fstat(fd %d) -> size=%llu (thread '%s')\n",
+                             fd, (unsigned long long)s.st_size, runtime_thread_get_name());
+    return 0;
 }
 static int64_t do_stat(const char *guest,GuestStat *out) {
     char path[1024]; HostStat s;
     int e=translate(guest,path,sizeof(path));
     if (e) return -e;
     if (!out) return -EFAULT;
-    if (host_stat(path,&s)) return -errno;
+    if (host_stat(path,&s)) {
+        if (file_trace()) printf("Runtime: stat(%s [%s]) failed errno %d (thread '%s')\n", guest, path, errno, runtime_thread_get_name());
+        return -errno;
+    }
     convert_stat(&s,out); return 0;
 }
 static int64_t do_getdents(int fd,char *buffer,uint64_t size,int64_t *basep) {
@@ -384,7 +492,11 @@ static int64_t do_rename(const char *from,const char *to) {
     int e=translate(from,a,sizeof(a));
     if (!e) e=translate(to,b,sizeof(b));
     if (e) return -e;
-    return rename(a,b) ? -errno : 0;
+    if (file_trace()) printf("Runtime: rename('%s' [%s] -> '%s' [%s]) (thread '%s')\n",
+                             from,a,to,b,runtime_thread_get_name());
+    int r=rename(a,b);
+    if (r && file_trace()) printf("Runtime: rename FAILED errno %d\n",errno);
+    return r ? -errno : 0;
 }
 static int64_t do_ftruncate(int fd,int64_t length) {
     int h=host_fd(fd);
@@ -441,6 +553,46 @@ static ABI int32_t sce_check_reachability(const char *p) {
     GuestStat s; return (int32_t)sce(do_stat(p,&s));
 }
 
+struct GuestIOVec {
+    void *iov_base;
+    size_t iov_len;
+};
+
+static ABI int64_t sce_getdents_3(int fd, char *buffer, uint64_t size) {
+    return sce(do_getdents(fd, buffer, size, NULL));
+}
+
+static ABI int64_t sce_readv(int fd, const struct GuestIOVec *iov, int iovcnt) {
+    if (!iov || iovcnt < 0) return ERR(22);
+    int64_t total = 0;
+    for (int i = 0; i < iovcnt; ++i) {
+        if (!iov[i].iov_base || !iov[i].iov_len) continue;
+        int64_t r = do_read(fd, iov[i].iov_base, iov[i].iov_len);
+        if (r < 0) return total ? total : sce(r);
+        total += r;
+        if ((size_t)r < iov[i].iov_len) break;
+    }
+    return total;
+}
+
+static ABI int64_t sce_writev(int fd, const struct GuestIOVec *iov, int iovcnt) {
+    if (!iov || iovcnt < 0) return ERR(22);
+    int64_t total = 0;
+    for (int i = 0; i < iovcnt; ++i) {
+        if (!iov[i].iov_base || !iov[i].iov_len) continue;
+        int64_t r = do_write(fd, iov[i].iov_base, iov[i].iov_len);
+        if (r < 0) return total ? total : sce(r);
+        total += r;
+        if ((size_t)r < iov[i].iov_len) break;
+    }
+    return total;
+}
+
+static ABI int64_t sce_chmod(const char *path, int mode) {
+    (void)path; (void)mode;
+    return 0;
+}
+
 static const RuntimeExport exports[]={
     {"sceKernelOpen",sce_open}, {"open",posix_open}, {"_open",posix_open},
     {"sceKernelClose",sce_close}, {"close",posix_close}, {"_close",posix_close},
@@ -452,6 +604,10 @@ static const RuntimeExport exports[]={
     {"sceKernelFstat",sce_fstat}, {"fstat",posix_fstat},
     {"sceKernelStat",sce_stat}, {"stat",posix_stat},
     {"sceKernelGetdirentries",sce_getdents}, {"getdirentries",posix_getdents},
+    {"sceKernelGetdents",sce_getdents_3}, {"getdents",sce_getdents_3},
+    {"sceKernelReadv",sce_readv}, {"readv",sce_readv},
+    {"sceKernelWritev",sce_writev}, {"writev",sce_writev},
+    {"sceKernelChmod",sce_chmod}, {"chmod",sce_chmod},
     {"sceKernelRename",sce_rename}, {"rename",posix_rename},
     {"sceKernelFtruncate",sce_ftruncate}, {"ftruncate",posix_ftruncate},
     {"sceKernelTruncate",sce_truncate}, {"truncate",posix_truncate},
@@ -472,6 +628,7 @@ int64_t runtime_file_lseek(int fd,int64_t o,int w) { return do_lseek(fd,o,w); }
 int64_t runtime_file_stat(const char *p,void *s) { return do_stat(p,s); }
 int64_t runtime_file_fstat(int fd,void *s) { return do_fstat(fd,s); }
 int64_t runtime_file_getdents(int fd,char *b,uint64_t n,int64_t *base) { return do_getdents(fd,b,n,base); }
+uint64_t runtime_file_bytes_read(void) { return __atomic_load_n(&bytes_read, __ATOMIC_RELAXED); }
 int runtime_file_translate(const char *guest,char *out,size_t size) { return translate(guest,out,size); }
 void runtime_file_report(void) {
     printf("Runtime: files opened=%zu, reads=%zu (%llu bytes), writes=%zu, not found=%zu\n",

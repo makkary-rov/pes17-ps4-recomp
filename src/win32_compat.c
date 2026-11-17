@@ -28,13 +28,15 @@ int runtime_win_rename(const char *from, const char *to) {
           : e == ERROR_DIR_NOT_EMPTY ? ENOTEMPTY : EIO;
     return -1;
 }
-/* Positional I/O keeps the descriptor's file position, as pread/pwrite do. */
+static SRWLOCK positional_lock = SRWLOCK_INIT;
+
+/* Positional I/O using OVERLAPPED. No file pointer save/restore is needed since
+ * callers specify explicit offsets and File manages descriptor positions. */
 static int64_t positional(int fd, void *buffer, size_t size, int64_t offset, int write) {
     HANDLE h = (HANDLE)_get_osfhandle(fd);
     if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
-    if (offset < 0) { errno = EINVAL; return -1; }
-    LARGE_INTEGER zero = {0}, position;
-    if (!SetFilePointerEx(h, zero, &position, FILE_CURRENT)) { errno = ESPIPE; return -1; }
+    if (offset < 0 || (int64_t)size < 0) { errno = EINVAL; return -1; }
+    AcquireSRWLockExclusive(&positional_lock);
     int64_t done = 0;
     while ((size_t)done < size) {
         DWORD chunk = size - (size_t)done > 0x40000000u ? 0x40000000u : (DWORD)(size - (size_t)done), n = 0;
@@ -46,7 +48,7 @@ static int64_t positional(int fd, void *buffer, size_t size, int64_t offset, int
         if (!ok) {
             DWORD e = GetLastError();
             if (e == ERROR_HANDLE_EOF) break;
-            SetFilePointerEx(h, position, NULL, FILE_BEGIN);
+            ReleaseSRWLockExclusive(&positional_lock);
             if (done) return done;
             errno = e == ERROR_NOACCESS ? EFAULT : e == ERROR_ACCESS_DENIED ? EBADF : EIO;
             return -1;
@@ -54,7 +56,7 @@ static int64_t positional(int fd, void *buffer, size_t size, int64_t offset, int
         done += n;
         if (n < chunk) break;
     }
-    SetFilePointerEx(h, position, NULL, FILE_BEGIN);
+    ReleaseSRWLockExclusive(&positional_lock);
     return done;
 }
 int64_t runtime_win_pread(int fd, void *buffer, size_t size, int64_t offset) {

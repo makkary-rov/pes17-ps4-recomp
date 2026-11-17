@@ -131,6 +131,9 @@ void runtime_thread_attach_main(void) {
     GuestThread *t=runtime_thread_current();
     snprintf(t->name,sizeof(t->name),"main");
 }
+const char *runtime_thread_get_name(void) {
+    return current && current->name[0] ? current->name : "main";
+}
 static GuestThread *find_thread(void *handle) {
     GuestThread *found=NULL;
     host_lock(&lock);
@@ -252,6 +255,7 @@ static void *host_start(void *p) {
     if (!EXIT_SET(t->exit_jump)) t->result=t->entry(t->argument);
     runtime_thread_keys_cleanup();
     host_lock(&lock); t->finished=1; ++exited; host_unlock(&lock);
+    printf("Runtime: guest thread '%s' finished (result=%p)\n", t->name, t->result);
     return t->result;
 }
 static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,void *argument,const char *name) {
@@ -285,7 +289,7 @@ static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,
     if (e) { fprintf(stderr,"STOP: host thread creation failed: %d\n",e); exit(21); }
     if (t->detached) host_thread_detach(t->host);
     host_lock(&lock); ++created; host_unlock(&lock);
-    printf("Runtime: guest thread '%s' created (stack=%llu, prio=%d)\n",t->name,(unsigned long long)stack,t->attr.prio);
+    printf("Runtime: guest thread '%s' created (entry=%p, stack=%llu, prio=%d)\n",t->name,t->entry,(unsigned long long)stack,t->attr.prio);
     return 0;
 }
 static ABI int32_t thread_create(GuestThread **out,ThreadAttr **attr,GuestEntry entry,void *argument,const char *name) {
@@ -342,6 +346,19 @@ static ABI int32_t thread_rename(GuestThread *t,const char *name) {
     if (t==current) set_host_name(t->name);
     return 0;
 }
+static ABI int32_t thread_set_schedparam(GuestThread *t, int policy, const int *param) {
+    if (!find_thread(t)) return 0;
+    t->attr.policy = policy;
+    if (param) t->attr.prio = *param;
+    return 0;
+}
+static ABI uint32_t thread_get_thread_id(void) {
+#ifdef _WIN32
+    return (uint32_t)GetCurrentThreadId();
+#else
+    return (uint32_t)syscall(SYS_gettid);
+#endif
+}
 static ABI int32_t thread_equal(GuestThread *a,GuestThread *b) { return a==b; }
 
 /* POSIX (libScePosix) variants return positive errno values. */
@@ -384,6 +401,7 @@ uintptr_t runtime_thread_resolve(const char *name) {
         {"T72hz6ffq08#p#J",thread_yield}, {"1tKyG7RlMJo#p#J",thread_get_prio},
         {"W0Hpm2X0uPE#p#J",thread_set_prio}, {"bt3CTBKmGyI#p#J",thread_set_affinity}, {"rcrVFJsQWRY#p#J",thread_get_affinity},
         {"GBUY7ywdULE#p#J",thread_rename}, {"3PtV6p3QNX4#p#J",thread_equal},
+        {"oIRFTjoILbg#3#D",thread_set_schedparam}, {"EI-5-jlq2dE#3#D",thread_get_thread_id},
         {"wtkt-teR1so#I#J",posix_attr_init}, {"zHchY8ft5pk#I#J",posix_attr_destroy},
         {"E+tyo3lp5Lw#I#J",posix_attr_set_detach}, {"2Q0z6rnBrTE#I#J",posix_attr_set_stack},
         {"euKRgm0Vn2M#I#J",posix_attr_set_param}, {"OxhIB8LB-PQ#I#J",posix_create},
@@ -397,5 +415,10 @@ uintptr_t runtime_thread_resolve(const char *name) {
 void runtime_thread_report(void) {
     host_lock(&lock);
     printf("Runtime: guest threads created=%zu, exited=%zu, joined=%zu\n",created,exited,joined_count);
+    for (GuestThread *t=threads;t;t=t->next) {
+        if (!t->finished) {
+            printf("  Active thread '%s': detached=%d, joined=%d\n", t->name, t->detached, t->joined);
+        }
+    }
     host_unlock(&lock);
 }

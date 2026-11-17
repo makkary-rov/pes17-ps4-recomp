@@ -4,6 +4,8 @@
 /* runtime_file.c calls the Windows file helpers (mkdir, rename, pread) that this test does not link. */
 #include "../src/win32_compat.c"
 #endif
+/* runtime_file.c names the calling thread in its diagnostics; the test has no guest threads. */
+const char *runtime_thread_get_name(void) { return "test"; }
 #include "../src/runtime_file.c"
 #include <assert.h>
 #ifdef _WIN32

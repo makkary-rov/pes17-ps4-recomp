@@ -317,7 +317,138 @@ static ABI int32_t posix_key_create(uint32_t *k,KeyDestructor d) { int32_t r=key
 static ABI int32_t posix_key_delete(uint32_t k) { int32_t r=key_delete(k); return r ? r&0xffff : 0; }
 static ABI int32_t posix_key_set(uint32_t k,void *v) { int32_t r=key_set(k,v); return r ? r&0xffff : 0; }
 
+/* ---- Event Flags ---- */
+typedef struct EventFlag {
+    uint32_t id;
+    uint32_t attr;
+    uint64_t pattern;
+    int deleted;
+    HostCond cond;
+    char name[32];
+    struct EventFlag *next;
+} EventFlag;
+
+static HostMutex ef_lock = HOST_MUTEX_INIT;
+static EventFlag *ef_registry;
+static uint32_t ef_next_id = 1;
+
+static EventFlag *ef_find(uint32_t id) {
+    for (EventFlag *e = ef_registry; e; e = e->next)
+        if (e->id == id && !e->deleted) return e;
+    return NULL;
+}
+
+static ABI int32_t kernel_create_event_flag(uint32_t *out, const char *name, uint32_t attr, uint64_t initPattern, const void *opt) {
+    (void)opt;
+    if (!out) return ERR(22);
+    EventFlag *ef = calloc(1, sizeof(*ef));
+    if (!ef) return ERR(12);
+    host_cond_init(&ef->cond);
+    host_lock(&ef_lock);
+    ef->id = ef_next_id++;
+    ef->attr = attr;
+    ef->pattern = initPattern;
+    if (name) strncpy(ef->name, name, sizeof(ef->name) - 1);
+    ef->next = ef_registry;
+    ef_registry = ef;
+    *out = ef->id;
+    host_unlock(&ef_lock);
+    return 0;
+}
+
+static ABI int32_t kernel_delete_event_flag(uint32_t id) {
+    host_lock(&ef_lock);
+    EventFlag *ef = ef_find(id);
+    if (!ef) { host_unlock(&ef_lock); return ERR(3); }
+    ef->deleted = 1;
+    host_cond_broadcast(&ef->cond);
+    host_unlock(&ef_lock);
+    return 0;
+}
+
+static ABI int32_t kernel_set_event_flag(uint32_t id, uint64_t bitPattern) {
+    host_lock(&ef_lock);
+    EventFlag *ef = ef_find(id);
+    if (!ef) { host_unlock(&ef_lock); return ERR(3); }
+    ef->pattern |= bitPattern;
+    host_cond_broadcast(&ef->cond);
+    host_unlock(&ef_lock);
+    return 0;
+}
+
+static ABI int32_t kernel_clear_event_flag(uint32_t id, uint64_t bitPattern) {
+    host_lock(&ef_lock);
+    EventFlag *ef = ef_find(id);
+    if (!ef) { host_unlock(&ef_lock); return ERR(3); }
+    ef->pattern &= bitPattern;
+    host_unlock(&ef_lock);
+    return 0;
+}
+
+static int ef_check_condition(uint64_t pattern, uint64_t bitPattern, uint32_t waitMode) {
+    if (waitMode & 0x01) {
+        return (pattern & bitPattern) == bitPattern;
+    } else {
+        return (pattern & bitPattern) != 0;
+    }
+}
+
+static ABI int32_t kernel_wait_event_flag(uint32_t id, uint64_t bitPattern, uint32_t waitMode, uint64_t *resultPattern, uint32_t *timeout_us) {
+    host_lock(&ef_lock);
+    EventFlag *ef = ef_find(id);
+    if (!ef) { host_unlock(&ef_lock); return ERR(3); }
+    
+    uint64_t deadline_ns = 0;
+    if (timeout_us) deadline_ns = host_monotonic_ns() + (uint64_t)*timeout_us * 1000ULL;
+    
+    while (!ef->deleted) {
+        if (ef_check_condition(ef->pattern, bitPattern, waitMode)) {
+            if (resultPattern) *resultPattern = ef->pattern;
+            if (waitMode & 0x10) ef->pattern = 0;
+            else if (waitMode & 0x20) ef->pattern &= ~bitPattern;
+            host_unlock(&ef_lock);
+            return 0;
+        }
+        if (timeout_us && host_monotonic_ns() >= deadline_ns) {
+            if (resultPattern) *resultPattern = ef->pattern;
+            host_unlock(&ef_lock);
+            return ERR(60);
+        }
+        if (timeout_us) {
+            uint64_t now = host_monotonic_ns();
+            uint64_t rem = deadline_ns > now ? deadline_ns - now : 0;
+            host_cond_timedwait(&ef->cond, &ef_lock, rem);
+        } else {
+            host_cond_wait(&ef->cond, &ef_lock);
+        }
+    }
+    host_unlock(&ef_lock);
+    return ERR(3);
+}
+
+static ABI int32_t kernel_poll_event_flag(uint32_t id, uint64_t bitPattern, uint32_t waitMode, uint64_t *resultPattern) {
+    host_lock(&ef_lock);
+    EventFlag *ef = ef_find(id);
+    if (!ef) { host_unlock(&ef_lock); return ERR(3); }
+    if (ef_check_condition(ef->pattern, bitPattern, waitMode)) {
+        if (resultPattern) *resultPattern = ef->pattern;
+        if (waitMode & 0x10) ef->pattern = 0;
+        else if (waitMode & 0x20) ef->pattern &= ~bitPattern;
+        host_unlock(&ef_lock);
+        return 0;
+    }
+    if (resultPattern) *resultPattern = ef->pattern;
+    host_unlock(&ef_lock);
+    return ERR(16);
+}
+
 static const RuntimeExport exports[]={
+    {"sceKernelCreateEventFlag",kernel_create_event_flag},
+    {"sceKernelDeleteEventFlag",kernel_delete_event_flag},
+    {"sceKernelSetEventFlag",kernel_set_event_flag},
+    {"sceKernelClearEventFlag",kernel_clear_event_flag},
+    {"sceKernelWaitEventFlag",kernel_wait_event_flag},
+    {"sceKernelPollEventFlag",kernel_poll_event_flag},
     {"sceKernelClockGettime",kernel_clock_gettime}, {"clock_gettime",posix_clock_gettime},
     {"clock_getres",posix_clock_getres},
     {"sceKernelGetProcessTime",process_time}, {"sceKernelGetProcessTimeCounter",process_time_counter},

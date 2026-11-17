@@ -87,10 +87,18 @@ static int create_locked(Rwlock **out) {
     if (e) { free(r); return e; }
     r->next=registry; registry=r; *out=r; ++created; return 0;
 }
+static ABI int32_t rw_attr_init(void *attr) {
+    if (attr) *(uint64_t *)attr = 0;
+    return 0;
+}
+static ABI int32_t rw_attr_destroy(void *attr) {
+    (void)attr;
+    return 0;
+}
 static ABI int32_t rw_init(Rwlock **out, void *const *attr, const char *name) {
     (void)name;
-    if (!out || (attr && !*attr)) return error(EINVAL);
-    if (attr) { fputs("STOP: non-default PS4 rwlock attributes are not implemented\n",stderr); exit(21); }
+    (void)attr;
+    if (!out) return error(EINVAL);
     host_lock(&registry_lock);
     /* POSIX allows uninitialized storage, so never read *out during init. */
     int e=create_locked(out);
@@ -177,15 +185,17 @@ static ABI int32_t rw_destroy(Rwlock **handle) {
     host_unlock(&registry_lock); return error(e);
 }
 uintptr_t runtime_rwlock_resolve(const char *name) {
-    if (!strcmp(name,"6ULAa0fq4jA#p#J")) return (uintptr_t)rw_init;
-    if (!strcmp(name,"BB+kb08Tl9A#p#J")) return (uintptr_t)rw_destroy;
-    if (!strcmp(name,"Ox9i0c7L5w0#p#J")) return (uintptr_t)rw_read;
-    if (!strcmp(name,"mqdNorrB+gI#p#J")) return (uintptr_t)rw_write;
-    if (!strcmp(name,"XD3mDeybCnk#p#J")) return (uintptr_t)rw_tryread;
-    if (!strcmp(name,"bIHoZCTomsI#p#J")) return (uintptr_t)rw_trywrite;
-    if (!strcmp(name,"+L98PIbGttk#p#J")) return (uintptr_t)rw_unlock;
-    if (!strcmp(name,"iPtZRWICjrM#p#J")) return (uintptr_t)rw_timedread;
-    if (!strcmp(name,"adh--6nIqTk#p#J")) return (uintptr_t)rw_timedwrite;
+    if ((!strcmp(name,"6ULAa0fq4jA#3#D") || !strcmp(name,"6ULAa0fq4jA#p#J"))) return (uintptr_t)rw_init;
+    if ((!strcmp(name,"BB+kb08Tl9A#3#D") || !strcmp(name,"BB+kb08Tl9A#p#J"))) return (uintptr_t)rw_destroy;
+    if ((!strcmp(name,"Ox9i0c7L5w0#3#D") || !strcmp(name,"Ox9i0c7L5w0#p#J"))) return (uintptr_t)rw_read;
+    if ((!strcmp(name,"mqdNorrB+gI#3#D") || !strcmp(name,"mqdNorrB+gI#p#J"))) return (uintptr_t)rw_write;
+    if ((!strcmp(name,"XD3mDeybCnk#3#D") || !strcmp(name,"XD3mDeybCnk#p#J"))) return (uintptr_t)rw_tryread;
+    if ((!strcmp(name,"bIHoZCTomsI#3#D") || !strcmp(name,"bIHoZCTomsI#p#J"))) return (uintptr_t)rw_trywrite;
+    if ((!strcmp(name,"+L98PIbGttk#3#D") || !strcmp(name,"+L98PIbGttk#p#J"))) return (uintptr_t)rw_unlock;
+    if ((!strcmp(name,"iPtZRWICjrM#3#D") || !strcmp(name,"iPtZRWICjrM#p#J"))) return (uintptr_t)rw_timedread;
+    if ((!strcmp(name,"adh--6nIqTk#3#D") || !strcmp(name,"adh--6nIqTk#p#J"))) return (uintptr_t)rw_timedwrite;
+    if ((!strcmp(name,"yOfGg-I1ZII#3#D"))) return (uintptr_t)rw_attr_init;
+    if ((!strcmp(name,"i2ifZ3fS2fo#3#D"))) return (uintptr_t)rw_attr_destroy;
     return 0;
 }
 void runtime_rwlock_report(void) {
