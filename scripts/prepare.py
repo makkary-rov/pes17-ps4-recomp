@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Inspect an already plaintext PS4 SELF; prepare a native entry-point probe.
+"""Prepare a native probe image from a game's plaintext eboot.
 
-No decryption, patches to source files, third-party modules or Python dependencies.
+Input: eboot.elf (plain ELF64) if present, else plaintext eboot.bin (SELF).
+The title config (--title, scripts/title_config.py) supplies the expected MD5 of
+eboot.elf and the public-safe title facts. libc.prx is optional.
+No decryption, patches to the game, third-party modules or Python dependencies.
 Format references are linked in README.md. All offsets are checked before use.
 """
 import argparse
@@ -12,6 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import title_config
 
 
 def span(data, offset, size):
@@ -70,6 +74,43 @@ def parse_self(data):
     return elf, header, ph, segments, missing
 
 
+def parse_elf(data):
+    """Plain little-endian ELF64 x86-64: file offsets are used directly."""
+    if span(data, 0, 7) != b'\x7fELF\x02\x01\x01':
+        raise ValueError("expected little-endian ELF64")
+    header = unpack('<16sHHIQQQIHHHHHH', data, 0)
+    if header[2] != 62:
+        raise ValueError("expected x86-64 ELF")
+    if header[9] != 56 or not 0 < header[10] < 256:
+        raise ValueError("unsupported program headers")
+    ph = [dict(zip(('type', 'flags', 'offset', 'vaddr', 'paddr', 'filesz', 'memsz', 'align'),
+                   unpack('<IIQQQQQQ', data, header[5] + i * 56)))
+          for i in range(header[10])]
+    return data, header[4], ph
+
+
+def encode_id(value):
+    """Same encoding as link_libc.py (copied: link_libc imports this module)."""
+    alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-'
+    result = alphabet[value & 63]
+    value >>= 6
+    while value:
+        result = alphabet[value & 63] + result
+        value >>= 6
+    return result
+
+
+def read_input(game):
+    """Return (name, container, source bytes, elf bytes, entry, program headers, segments, missing)."""
+    if (game / 'eboot.elf').is_file():
+        source = (game / 'eboot.elf').read_bytes()
+        elf, entry, ph = parse_elf(source)
+        return 'eboot.elf', 'elf', source, elf, entry, ph, [], []
+    source = (game / 'eboot.bin').read_bytes()
+    elf, header, ph, segments, missing = parse_self(source)
+    return 'eboot.bin', 'self', source, elf, header[4], ph, segments, missing
+
+
 def sfo(data):
     magic, version, keys, values, count = unpack('<4sIIII', data, 0)
     if magic != b'\0PSF':
@@ -121,14 +162,24 @@ def inspect_libc(path):
     return evidence
 
 
-def prepare(game, out, resource_inventory=True):
-    source = (game / 'eboot.bin').read_bytes()
-    elf, header, ph, segments, missing = parse_self(source)
+def prepare(game, out, title, resource_inventory=True, allow_hash_mismatch=False):
+    config = title_config.load(title)
+    input_name, container, source, elf, entry, ph, segments, missing = read_input(game)
+    input_md5 = hashlib.md5(source).hexdigest()
+    hash_check = dict(status='not_checked', expected_md5=config['eboot_elf_md5'], input_md5=input_md5,
+                      allowed_mismatch=False)
+    if input_name == 'eboot.elf' and input_md5 != config['eboot_elf_md5']:
+        if not allow_hash_mismatch:
+            raise ValueError(f"eboot.elf md5 {input_md5} does not match title config "
+                             f"{config['eboot_elf_md5']}; pass --allow-hash-mismatch to continue")
+        hash_check.update(status='mismatch', allowed_mismatch=True)
+    elif input_name == 'eboot.elf':
+        hash_check['status'] = 'match'
     loads = [p for p in ph if p['type'] in (1, 0x61000010)]
     def mapped(addr, size=8):
         return any(p['vaddr'] <= addr and addr + size <= p['vaddr'] + p['memsz'] for p in loads)
     size = max(p['vaddr'] + p['memsz'] for p in loads)
-    if size > 512 * 1024 * 1024 or not mapped(header[4], 1):
+    if size > 512 * 1024 * 1024 or not mapped(entry, 1):
         raise ValueError('invalid memory image')
     image = bytearray(size)
     for p in loads:
@@ -156,7 +207,7 @@ def prepare(game, out, resource_inventory=True):
     for pos in range(0, len(syms), 24):
         name, info, other, shndx, value, sz = unpack('<IBBHQQ', syms, pos)
         symbols.append(dict(name=string(name), type=info & 15, section=shndx, value=value, size=sz))
-    relocs, counts, imports = [], collections.Counter(), {}
+    relocs, counts, imports, unmapped = [], collections.Counter(), {}, 0
     for offset_tag, size_tag in ((0x61000029, 0x6100002d), (0x6100002f, 0x61000031)):
         table = span(blob, tags[offset_tag], tags[size_tag])
         if len(table) % 24:
@@ -166,7 +217,8 @@ def prepare(game, out, resource_inventory=True):
             kind, sym = info & 0xffffffff, info >> 32
             counts[kind] += 1
             if not mapped(target):
-                raise ValueError(f'relocation outside mapped segments: {target:#x}')
+                unmapped += 1
+                continue
             if kind == 8:
                 relocs.append((target, 0, addend, 0))  # base-relative
             elif kind in (1, 6, 7):
@@ -185,7 +237,28 @@ def prepare(game, out, resource_inventory=True):
                     relocs.append((target, kind, imports[sym], addend))
             else:
                 raise ValueError(f'unsupported relocation {kind}')
+    if unmapped:
+        raise ValueError(f'{unmapped} relocation(s) outside mapped segments of '
+                         f'{sum(counts.values())} relocation records')
     names = [symbols[i]['name'] for i in imports]
+    # Same decoding as link_modules.py: dynamic tags give library/module IDs; the
+    # import name suffix '#<library key>#<module key>' selects them.
+    libraries, modules = {}, {}
+    for tag, value in dyn:
+        if tag in (0x61000013, 0x61000015, 0x6100000d, 0x6100000f):
+            table = libraries if tag in (0x61000013, 0x61000015) else modules
+            key = encode_id(value >> 48)
+            identity = (string(value & 0xffffffff), (value >> 32) & 65535)
+            if key in table and table[key] != identity:
+                raise ValueError('conflicting module/library IDs')
+            table[key] = identity
+    import_identities = {}
+    for name in names:
+        parts = name.split('#')
+        if len(parts) == 3:
+            lib, mod = parts[1], parts[2]
+            import_identities[name] = [parts[0], libraries[lib][0] if lib in libraries else None,
+                                       modules[mod][0] if mod in modules else None]
     candidates = ('_init_env', 'atexit', 'exit', '_exit', '__cxa_atexit', '__cxa_finalize',
                   '__cxa_guard_acquire', '__cxa_guard_release', '__cxa_guard_abort',
                   '__stack_chk_guard', '__stack_chk_fail', 'malloc', 'free',
@@ -204,12 +277,18 @@ def prepare(game, out, resource_inventory=True):
                   'sceKernelGetDirectMemorySize', 'sceKernelAllocateDirectMemory',
                   'sceKernelMapDirectMemory', 'sceKernelReleaseDirectMemory', 'sceKernelMunmap')
     known = {nid(name): name for name in candidates}
-    libc_evidence = inspect_libc(game / 'sce_module/libc.prx')
+    libc_path = game / 'sce_module' / 'libc.prx'
+    if libc_path.is_file():
+        libc_evidence = dict(status='present', **inspect_libc(libc_path))
+    else:
+        libc_evidence = dict(status='absent', init_env_is_ret=False)
+    capability = int(libc_evidence['init_env_is_ret'])
+    image_sha256 = hashlib.sha256(image).hexdigest()
     out.mkdir(parents=True, exist_ok=True)
     # A deliberately small format, consumed by main.c; no host struct packing.
     with (out / 'boot.bin').open('wb') as f:
-        f.write(struct.pack('<8sQQQQQQ', b'PESIMG1\0', size, header[4], len(loads), len(relocs), len(names),
-                            int(libc_evidence['init_env_is_ret'])))
+        f.write(struct.pack('<8sQQQQQQ', b'PESIMG1\0', size, entry, len(loads), len(relocs), len(names),
+                            capability))
         for p in loads:
             f.write(struct.pack('<QQQ', p['vaddr'], p['memsz'], p['flags']))
         for name in names:
@@ -228,31 +307,40 @@ def prepare(game, out, resource_inventory=True):
         if path.is_file():
             resources[path.relative_to(game / 'dvdroot_ps4').parts[0]] += 1
             total_bytes += path.stat().st_size
-    report = dict(source_sha256=hashlib.sha256(source).hexdigest(), source_bytes=len(source),
-                  sfo=sfo((game / 'sce_sys/param.sfo').read_bytes()), entry=hex(header[4]),
-                  image_bytes=size, program_headers=ph, self_segments=segments,
+    report = dict(input_file=input_name, input_container=container,
+                  input_sha256=hashlib.sha256(source).hexdigest(), input_md5=input_md5, input_bytes=len(source),
+                  hash_check=hash_check, title_config=dict(path=str(title),
+                                                           sha256=hashlib.sha256(Path(title).read_bytes()).hexdigest()),
+                  sfo=sfo((game / 'sce_sys/param.sfo').read_bytes()), entry=hex(entry),
+                  image_bytes=size, image_sha256=image_sha256, program_headers=ph, self_segments=segments,
                   unavailable_metadata_headers=missing, needed=[string(v) for t, v in dyn if t == 1],
-                  relocation_counts=dict(counts), import_count=len(names), imports=names,
+                  relocation_counts=dict(counts), relocation_records_total=sum(counts.values()),
+                  relocations_written=len(relocs), import_count=len(names), imports=names,
+                  import_identities=import_identities,
                   import_name_hints={name: known[name.split('#')[0]] for name in names if name.split('#')[0] in known},
                   libc_evidence=libc_evidence,
-                  bundled_modules=sorted(p.name for p in (game / 'sce_module').iterdir()),
+                  bundled_modules=sorted(p.name for p in (game / 'sce_module').iterdir()) if (game / 'sce_module').is_dir() else [],
                   resources=dict(resources), resource_bytes=total_bytes, resource_inventory=resource_inventory,
                   status='Prepared only; execution and Vulkan are tested separately.')
     (out / 'analysis.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
-    print(f"{report['sfo'].get('TITLE')} | entry={header[4]:#x} | image={size:,} bytes")
-    print(f"{len(names)} imported symbols; {sum(counts.values()):,} relocations; {len(report['needed'])} required modules")
+    print(f"{report['sfo'].get('TITLE')} | entry={entry:#x} | image={size:,} bytes | input={input_name}")
+    print(f"{len(names)} imported symbols; {sum(counts.values()):,} relocation records; "
+          f"{len(relocs):,} written; {len(report['needed'])} required modules")
     print(f"Unavailable non-loadable metadata headers: {missing}; not a byte-exact ELF reconstruction")
     print(f"Output: {out.resolve()}")
-    print(f"libc _init_env verified RET: {libc_evidence['init_env_is_ret']}")
+    print(f"libc status: {libc_evidence['status']}; _init_env verified RET: {libc_evidence['init_env_is_ret']}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('game', type=Path)
+    parser.add_argument('--title', type=Path, required=True, help='title config (pes-title-1 JSON)')
     parser.add_argument('--out', type=Path, default=Path(__file__).resolve().parent.parent / 'out')
     parser.add_argument('--no-resource-inventory', action='store_true')
+    parser.add_argument('--allow-hash-mismatch', action='store_true',
+                        help='continue when eboot.elf does not match the title config MD5 (recorded)')
     args = parser.parse_args()
     try:
-        prepare(args.game, args.out, not args.no_resource_inventory)
+        prepare(args.game, args.out, args.title, not args.no_resource_inventory, args.allow_hash_mismatch)
     except (ValueError, OSError, StopIteration, KeyError, IndexError) as error:
         parser.exit(1, f'prepare failed: {error}\n')
