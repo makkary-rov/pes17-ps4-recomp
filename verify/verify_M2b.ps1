@@ -81,7 +81,7 @@ try {
             if (Test-Path -LiteralPath $src) { Copy-Item -LiteralPath $src -Destination (Join-Path $W $f) }
         }
         $ExeSha = Hash-File $Exe
-        $rl = Run-Proc $Py @((Join-Path $Root 'scripts\link_modules.py'), $GameDir, '--out', $W) (Join-Path $V 'M2b-link.log')
+        $rl = Run-Proc $Py @((Join-Path $Root 'scripts\link_modules.py'), $GameDir, '--out', $W, '--title', (Join-Path $Root 'src\title\CUSA04957.json')) (Join-Path $V 'M2b-link.log')
         $linked = Join-Path $W 'boot-linked.bin'
         if ($rl.Exit -eq 0 -and (Test-Path -LiteralPath $linked)) {
             $summary = (($rl.Text -split "`r?`n") | Where-Object { $_ -like 'Linked modules*' } | Select-Object -First 1)

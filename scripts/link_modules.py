@@ -94,7 +94,7 @@ def patch_fs_loads(image, ph, base):
     return patched
 
 
-def link(game, out, module_names=DEFAULT_MODULES):
+def link(game, out, module_names=DEFAULT_MODULES, title=None):
     main = module(game / 'eboot.elf' if (game / 'eboot.elf').is_file() else game / 'eboot.bin')
     raw = (out / 'boot.bin').read_bytes()
     magic, size, entry, ns, nr, ni, flags = unpack('<8s6Q', raw, 0)
@@ -125,8 +125,10 @@ def link(game, out, module_names=DEFAULT_MODULES):
                     if lib in main_libraries and mod in main_modules else f'{n}#{lib[0]}')
             identities[key] = len(names)
             names.append(name)
+            added[name] = [n, lib[0], mod[0]]
         return identities[key]
 
+    added = {}  # imports the linker adds (modules' own imports): name -> [nid, library, module]
     exports, by_nid = {}, collections.defaultdict(list)
     table = []
     base = (size + 65535) & ~65535
@@ -243,8 +245,9 @@ def link(game, out, module_names=DEFAULT_MODULES):
         for relocation in relocs:
             f.write(struct.pack('<QQqq', *relocation))
         f.write(image)
+    alias_lines = linked_aliases(added, title, out) if title else 0
     report = dict(modules=[{k: (hex(v) if k in ('base', 'init', 'tls_address') else v) for k, v in t.items()} for t in table],
-                  bindings=len(bindings), imports=len(names), fs_loads_patched=fs_patched,
+                  bindings=len(bindings), imports=len(names), alias_lines_added=alias_lines, fs_loads_patched=fs_patched,
                   red_zone=red_zone,
                   main_tls=dict(zip(('vaddr', 'filesz', 'memsz', 'align'), main_tls_values)),
                   unresolved_imports=unresolved)
@@ -254,11 +257,35 @@ def link(game, out, module_names=DEFAULT_MODULES):
           f'fs->gs patched={fs_patched}')
 
 
+def linked_aliases(added, title, out):
+    """Append import-aliases.txt lines for the imports the linker added (the modules' own imports),
+    using the title config's suffix map exactly as prepare.py does for the eboot's own imports,
+    including the decoded library/module check. Returns the number of lines added."""
+    import title_config
+    config = title_config.load(Path(title))
+    rows = {row['suffix']: row for row in config['import_suffix_map']}
+    lines = []
+    for name, (_, library, module) in added.items():
+        parts = name.split('#')
+        row = rows.get('#' + '#'.join(parts[1:])) if len(parts) == 3 else None
+        if row is None:
+            continue
+        if (library, module) != (row['library'], row['module']):
+            raise ValueError(f"import {name}: decoded {library}/{module}, suffix map row "
+                             f"{row['suffix']} says {row['library']}/{row['module']}")
+        lines.append(f"{name} {parts[0] + row['canonical']}\n")
+    path = out / 'import-aliases.txt'
+    existing = path.read_text(encoding='utf-8') if path.is_file() else ''
+    path.write_text(existing + ''.join(line for line in lines if line not in existing), encoding='utf-8', newline='')
+    return len(lines)
+
+
 if __name__ == '__main__':
     import argparse
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('game', type=Path)
     p.add_argument('--out', type=Path, default=Path(__file__).resolve().parent.parent / 'out')
     p.add_argument('--modules', nargs='*', default=list(DEFAULT_MODULES))
+    p.add_argument('--title', type=Path, help='title config: its suffix map also aliases the modules own imports')
     a = p.parse_args()
-    link(a.game, a.out, a.modules)
+    link(a.game, a.out, a.modules, a.title)
