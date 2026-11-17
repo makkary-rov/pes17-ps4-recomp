@@ -50,7 +50,7 @@ class RealConfigTests(unittest.TestCase):
         self.assertEqual(data["eboot_elf_md5"], "5213cf72d23f5bc6f3728f45091dea0c")
         self.assertEqual(data["expect"], {"entry": "0x910", "relocations_written": 184284,
                                           "imports": 828})
-        self.assertIsNone(data["gnm_region"])
+        self.assertEqual(data["gnm_region"], {"lo": 0x274B000, "hi": 0x276A000})
         self.assertEqual(data["import_suffix_map"], [])
         self.assertEqual(data["import_aliases"], [])
 

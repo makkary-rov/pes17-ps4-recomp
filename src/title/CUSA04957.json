@@ -9,7 +9,10 @@
     "relocations_written": 184284,
     "imports": 828
   },
-  "gnm_region": null,
+  "gnm_region": {
+    "lo": 41201664,
+    "hi": 41328640
+  },
   "import_suffix_map": [],
   "import_aliases": []
 }

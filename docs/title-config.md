@@ -22,7 +22,7 @@ and validates a file. `validate(data)` checks a parsed dict. Both raise
 | `save_title_id` | string | Title id used for the save root. Same format. |
 | `eboot_elf_md5` | string | MD5 of the input `eboot.elf`, 32 lowercase hex characters. |
 | `expect` | object | `entry` (`0x` hex address), `relocations_written` (integer), `imports` (integer). No other keys. |
-| `gnm_region` | object or null | `{"lo": int, "hi": int}` with `0 <= lo < hi`, guest addresses. `null` until the region is measured. |
+| `gnm_region` | object or null | `{"lo": int, "hi": int}` (JSON decimal integers, not hex strings) with `0 <= lo < hi`, guest addresses. `null` until the region is measured. |
 | `import_suffix_map` | list | Per-library suffix rows (see below). |
 | `import_aliases` | list | Per-import alias rows (see below). |
 

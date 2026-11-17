@@ -37,6 +37,38 @@ CALLGRAPH = (
 SIGS = '0x00401000 size    32 sites    3 ext    1: SET_CONTEXT_REG(PA_SC_AA_CONFIGx2)\n'
 F_OK_ROW = '{0x401000, 5, {0x55, 0x48, 0x89, 0xe5, 0x53}, 3, 0, "gnm_0401000: SET_CONTEXT_REG(PA_SC_AA_CONFIGx2)"},'
 F_CB_ROW = '{0x401060, 7, {0x48, 0x8b, 0x07, 0x48, 0x83, 0xc0, 0x08}, 0, 1, "gnm_0401060"},'
+HEADER = 'Disassembly of section .data:\n\n00401000 <.data>:\n'
+# Two relocatable functions, at 0x401000 and 0x401040 (the second starts exactly at a region HI of 0x401040).
+TWO_ASM = HEADER + (
+    '  401000:\t55 \tpush   rbp\n'
+    '  401001:\t48 89 e5 \tmov    rbp,rsp\n'
+    '  401004:\t53 \tpush   rbx\n'
+    '  401005:\tc3 \tret\n'
+    '  401040:\t55 \tpush   rbp\n'
+    '  401041:\t48 89 e5 \tmov    rbp,rsp\n'
+    '  401044:\t53 \tpush   rbx\n'
+    '  401045:\tc3 \tret\n'
+)
+TWO_CG = (
+    '0x00401000 size    32 sites     1 ext_fns     1 int_fns     0\n'
+    '0x00401040 size    32 sites     1 ext_fns     1 int_fns     0\n'
+)
+# 0x401080 starts with a short jump (eb 0e jmp), then a valid prologue: only a jump test can skip it.
+JMP_ASM = HEADER + (
+    '  401000:\t55 \tpush   rbp\n'
+    '  401001:\t48 89 e5 \tmov    rbp,rsp\n'
+    '  401004:\t53 \tpush   rbx\n'
+    '  401005:\tc3 \tret\n'
+    '  401080:\teb 0e \tjmp    401090\n'
+    '  401082:\t55 \tpush   rbp\n'
+    '  401083:\t48 89 e5 \tmov    rbp,rsp\n'
+    '  401086:\t53 \tpush   rbx\n'
+    '  401087:\tc3 \tret\n'
+)
+JMP_CG = (
+    '0x00401000 size    32 sites     1 ext_fns     1 int_fns     0\n'
+    '0x00401080 size    32 sites     0 ext_fns     1 int_fns     0\n'
+)
 
 
 class GenGnmTableTests(unittest.TestCase):
@@ -97,6 +129,49 @@ class GenGnmTableTests(unittest.TestCase):
         res = self.run_gen(region='0x500000-0x500100')
         self.assertNotEqual(res.returncode, 0)
         self.assertFalse(self.out.exists())
+
+    def write_inputs(self, asm, cg):
+        self.asm.write_text(asm)
+        self.cg.write_text(cg)
+
+    def test_region_hi_is_excluded_and_lo_is_included(self):
+        self.write_inputs(TWO_ASM, TWO_CG)
+        res = self.run_gen(region='0x401000-0x401040')
+        self.assertEqual(res.returncode, 0, res.stderr)
+        text = self.out.read_text()
+        self.assertIn('// 1 functions; 0 skipped', text)
+        self.assertIn('{0x401000, 5, ', text)
+        self.assertNotIn('{0x401040,', text)
+
+    def test_jmp_prologue_is_skipped(self):
+        self.write_inputs(JMP_ASM, JMP_CG)
+        res = self.run_gen(region='0x401000-0x401100')
+        self.assertEqual(res.returncode, 0, res.stderr)
+        text = self.out.read_text()
+        self.assertIn('// 1 functions; 1 skipped', text)
+        self.assertNotIn('{0x401080,', text)
+
+    def test_malformed_region_is_rejected(self):
+        self.write_inputs(TWO_ASM, TWO_CG)
+        for bad in ('0x401000', '0x401100-0x401000', '0x401000-0x401000', 'zz-0x401100',
+                    '0x401000-xyz', '-0x401100', ''):
+            with self.subTest(region=bad):
+                res = self.run_gen(region=bad)
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn('argument --region', res.stderr)
+                self.assertFalse(self.out.exists())
+
+    def test_row_order_follows_input_order(self):
+        # The generator does not sort: rows come out in callgraph line order.
+        self.write_inputs(TWO_ASM, TWO_CG)
+        rows = lambda: [line.split(',')[0] for line in self.out.read_text().splitlines()
+                        if line.startswith('{')]
+        self.assertEqual(self.run_gen(region='0x401000-0x401100').returncode, 0)
+        forward = rows()
+        self.assertEqual(forward, ['{0x401000', '{0x401040'])
+        self.cg.write_text(''.join(reversed(TWO_CG.splitlines(keepends=True))))
+        self.assertEqual(self.run_gen(region='0x401000-0x401100').returncode, 0)
+        self.assertEqual(rows(), list(reversed(forward)))
 
 
 if __name__ == '__main__':

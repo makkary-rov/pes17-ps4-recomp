@@ -10,7 +10,7 @@
 ## Not in this repository
 
 - Game files, executables, dumps, firmware, keys, saves, trophy data or any other content from the game.
-- Generated tables derived from the game. One exception is pending removal: `gpu/shim/pes_gnm_table.inc` (U-4), dropped at M2.
+- Generated tables derived from the game. They are produced locally and never committed: the generated libGnm table lives in `src/title/generated/`, which is git-ignored.
 - Build outputs (`out/`) and logs.
 
 You need your own legally obtained dump to run the project. No game files, keys or firmware are included or provided.
