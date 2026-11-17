@@ -335,6 +335,17 @@ class LoaderTests(unittest.TestCase):
         ])
         self.assertIn('Imports: 1 host, 0 native, 1 trap, 0 prefix_only', r.stdout.splitlines())
 
+    def test_libc_heap_trace_info_import_resolves_to_a_host_contract(self):
+        # libc.prx imports sceLibcHeapGetTraceInfo from libSceLibcInternalExt (a two-part name, never aliased).
+        data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['NWtTN10cJzE#libSceLibcInternalExt'], capabilities=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            r = self.run_image(data, '--stop-before-entry', '--import-report', str(report))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertEqual(rows[1], '0\tNWtTN10cJzE#libSceLibcInternalExt\tfunc\tNWtTN10cJzE#libSceLibcInternalExt\thost\t'
+                                  'sceLibcHeapGetTraceInfo\t-')
+
     def test_import_report_looked_up_name_is_the_alias_canonical_name(self):
         data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['fixture-import'], capabilities=1)
         with tempfile.TemporaryDirectory() as tmp:

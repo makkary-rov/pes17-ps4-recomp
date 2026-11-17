@@ -48,6 +48,12 @@ static ABI void guest_set_heap_api(void **api) {
     puts("Runtime: application heap API registered");
 }
 void **runtime_application_heap_api(void) { return application_heap_api; }
+/* sceLibcHeapGetTraceInfo(info): libc asks the heap-trace service for its state. The runtime keeps no heap
+   trace, so it reports EINVAL (22) and leaves the caller's structure untouched. */
+static ABI int guest_heap_trace_info(void *info) {
+    (void)info;
+    return 22;
+}
 void runtime_set_module_tls(uint64_t module, const void *data, uint64_t filesz, uint64_t memsz) {
     if (module<2 || module>=TLS_MODULES) { fputs("STOP: unsupported TLS module id\n",stderr); exit(21); }
     tls_modules[module].data=data; tls_modules[module].filesz=filesz; tls_modules[module].memsz=memsz;
@@ -224,6 +230,7 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
     if (!strcmp(name, "vNe1w4diLCs#p#J")) return (uintptr_t)guest_tls_get_addr;
     if (!strcmp(name, "959qrazPIrg#p#J")) return (uintptr_t)guest_procparam;
     if (!strcmp(name, "p5EcQeEeJAE#p#J")) return (uintptr_t)guest_set_heap_api;
+    if (!strcmp(name, "NWtTN10cJzE#libSceLibcInternalExt")) return (uintptr_t)guest_heap_trace_info;
     uintptr_t mutex = runtime_mutex_resolve(name);
     if (mutex) return mutex;
     uintptr_t thread = runtime_thread_resolve(name);
