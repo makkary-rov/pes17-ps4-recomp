@@ -8,6 +8,7 @@
 #include <inttypes.h>
 #include <cpuid.h>
 #include "runtime.h"
+#include "runtime_trace.h"
 #include "gpu/pesgpu.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
@@ -930,6 +931,8 @@ int main(int argc, char **argv) {
     mallopt(M_MMAP_THRESHOLD,32*1024*1024);
 #endif
     check_cpu();
+    pes_trace_init(getenv("PES_TRACE"));
+    pes_trace(PES_TRACE_LOADER, "start", "argc=%d", argc);
     int cpu_only = 0, strict_imports = 0;
     unsigned timeout_seconds = 10;
     const char *content_profile=NULL, *app0=NULL, *user_dir=NULL, *patch_file=NULL, *import_aliases=NULL;

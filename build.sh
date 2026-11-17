@@ -102,4 +102,8 @@ if [[ ${1:-} == --test ]]; then
     out/sema-test
     "$CC" -std=c11 -D_GNU_SOURCE -O2 -g -Wall -Wextra -Werror -I. -Isrc tests/test_content.c src/runtime_content.c -o out/content-test
     out/content-test
+    "$CC" -std=c11 -D_GNU_SOURCE -O2 -g -Wall -Wextra -Werror -pthread -Isrc tests/test_title_infra.c src/runtime_trace.c src/runtime_patch.c -o out/title-infra-test
+    out/title-infra-test
+    "$CC" -std=c11 -D_GNU_SOURCE -DPES_NO_TRACE -O2 -g -Wall -Wextra -Werror -pthread -Isrc tests/test_title_infra.c src/runtime_trace.c src/runtime_patch.c -o out/title-infra-notrace-test
+    out/title-infra-notrace-test
 fi

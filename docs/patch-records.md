@@ -15,3 +15,12 @@ This file holds the template. No records are listed yet.
 | Root cause or workaround | if workaround: the root-cause task ID |
 | Test | harness scenario and pass condition |
 | Status | proposed / approved (QA) / removed |
+
+## Patch engine and observer (src/runtime_patch.h)
+
+`pes_patch_apply` applies an entry only if the SHA-256 of the original bytes at its offset matches the
+record; otherwise the entry is refused, logged (`PES_TRACE=patch`) and changes nothing. The table is data
+and starts empty: no patch is applied until its record above is approved and a test fails without it.
+`pes_observer_sample` is the read-only state observer (`PES_TRACE=title`); it cannot write guest memory.
+Trace subsystems: `PES_TRACE=loader,file,gpu,title,kernel,patch` (default off, read once at startup,
+per-subsystem cap `PES_TRACE_CAP`, output `PES_TRACE_FILE`); `-DPES_NO_TRACE` compiles it out.

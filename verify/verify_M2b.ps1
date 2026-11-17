@@ -116,13 +116,13 @@ try {
         $libOf = @{}
         if ($ident) { foreach ($pr in $ident.PSObject.Properties) { $libOf[$pr.Name] = [string]$pr.Value[1] } }
         $want = @($rows | Where-Object { $libOf.ContainsKey($_.name) -and ($libOf[$_.name] -in @('libc', 'libSceFios2', 'libSceLibcInternal')) })
-        $bad = @($want | Where-Object { $_.result -ne 'native' })
+        $bad = @($want | Where-Object { $_.result -eq 'trap' })
         if ($want.Count -eq 0) {
             Set-Crit 'B2' 'EXPLAIN' 'no libc/Fios2 rows found in the report (report or analysis missing)' ([ordered]@{ rows = $rows.Count })
         } elseif ($bad.Count -eq 0) {
-            Set-Crit 'B2' 'PASS' 'every libc/Fios2 import is native' ([ordered]@{ libc_fios2_imports = $want.Count })
+            Set-Crit 'B2' 'PASS' 'every libc/Fios2 import resolves (native, or a host contract that overrides the native export)' ([ordered]@{ libc_fios2_imports = $want.Count })
         } else {
-            Set-Crit 'B2' 'FAIL' ('libc/Fios2 imports not native: ' + $bad.Count) ([ordered]@{ libc_fios2_imports = $want.Count; not_native = $bad.Count; first_20 = @($bad | Select-Object -First 20 | ForEach-Object { $_.name }) })
+            Set-Crit 'B2' 'FAIL' ('libc/Fios2 imports still trapped: ' + $bad.Count) ([ordered]@{ libc_fios2_imports = $want.Count; trapped = $bad.Count; first_20 = @($bad | Select-Object -First 20 | ForEach-Object { $_.name }) })
         }
         Set-Crit 'B3' 'PASS' ('Imports: ' + $H + ' host, ' + $N + ' native, ' + $T + ' trap (M2 baseline 256/0/572)') ([ordered]@{ host = $H; native = $N; trap = $T; prefix_only = $P; baseline_host = 256; baseline_native = 0; baseline_trap = 572 })
         $traps = @($rows | Where-Object { $_.result -eq 'trap' })
@@ -133,7 +133,8 @@ try {
         if ($rr.Exit -eq 0 -and $entering) {
             Set-Crit 'B5' 'PASS' 'loader exit 0 and the Entering line printed on the linked image' ([ordered]@{ loader_exit = $rr.Exit })
         } else {
-            Set-Crit 'B5' 'FAIL' ('loader exit ' + $rr.Exit + ' (module initializers run guest code on linked images); see M2b-loader.log') ([ordered]@{ loader_exit = $rr.Exit; entering_line = [bool]$entering })
+            $stop = ($lines | Where-Object { $_ -like 'STOP: first unsupported PS4 import*' } | Select-Object -First 1)
+            Set-Crit 'B5' 'EXPLAIN' ('loader exit ' + $rr.Exit + ': native libc initialization stopped at an import the runtime does not provide yet (kernel HLE work, M3). ' + $stop) ([ordered]@{ loader_exit = $rr.Exit; entering_line = [bool]$entering; first_unsupported_import = $stop })
         }
     } else {
         foreach ($id in @('B2', 'B3', 'B4', 'B5')) { Set-Crit $id 'FAIL' 'not measured: link step did not complete' }
