@@ -349,6 +349,12 @@ static void test_libc_startup_kernel_contracts(void) {
     assert(first && second && first!=second);
     *first=0; *second=1;
     assert(trace(NULL)!=0);
+    /* Offline NP layer: lifecycle calls succeed, online calls report SCE_NP_ERROR_SIGNED_OUT. */
+    typedef int32_t (ABI *Np)(void);
+    Np np_register=GET(Np,"0c7HbXRKUt4#libSceNpManagerForToolkit");     /* sceNpRegisterStateCallbackForToolkit */
+    Np np_score=GET(Np,"zT0XBtgtOSI#i#i");                              /* sceNpScoreRecordScore */
+    assert(np_register && np_register()==0);
+    assert(np_score && np_score()==(int32_t)0x80550006);
 }
 int main(int argc,char **argv) {
     runtime_start(0); assert(runtime_resolve("bzQExy189ZI#q#q",0)==0);
