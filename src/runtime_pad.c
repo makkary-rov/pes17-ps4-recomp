@@ -22,7 +22,7 @@
 #define ERR_INVALID_HANDLE ((int32_t)0x80920003)
 #define ERR_ALREADY_OPENED ((int32_t)0x80920004)
 #define ERR_NOT_INITIALIZED ((int32_t)0x80920005)
-#define PAD_HANDLE 1
+#define MAX_PAD_HANDLES 32
 
 enum {
     BTN_L3=0x2, BTN_R3=0x4, BTN_OPTIONS=0x8, BTN_UP=0x10, BTN_RIGHT=0x20, BTN_DOWN=0x40, BTN_LEFT=0x80,
@@ -57,10 +57,17 @@ _Static_assert(__builtin_offsetof(PadData,timestamp)==80,"OrbisPadData timestamp
 _Static_assert(sizeof(ControllerInfo)==28,"OrbisPadControllerInformation layout");
 
 static HostMutex lock=HOST_MUTEX_INIT;
-static int initialized, opened, sdl_ready;
+static int initialized, sdl_ready;
 static SDL_Gamepad *gamepad;
 static size_t reads;
 static uint8_t connected_count;
+
+typedef struct {
+    int active;
+    int32_t user;
+    int32_t index;
+} PadSlot;
+static PadSlot s_pad_slots[MAX_PAD_HANDLES + 1];
 
 static uint64_t now_us(void) { return host_monotonic_ns()/1000u; }
 static uint8_t axis(int16_t v) { int x=(v+32768)>>8; return (uint8_t)(x<0 ? 0 : x>255 ? 255 : x); }
@@ -492,44 +499,70 @@ static void sample(PadData *d) {
 
 static ABI int32_t pad_init(void) { host_lock(&lock); initialized=1; host_unlock(&lock); return 0; }
 static ABI int32_t pad_open(int32_t user, int32_t type, int32_t index, const void *param) {
-    (void)param;
+    (void)param; (void)type;
     if (!initialized) return ERR_NOT_INITIALIZED;
-    if (user!=1) return ERR_INVALID_ARG;
-    if (type!=0 && type!=2) return ERR_INVALID_ARG; /* standard / special port */
-    if (index) return ERR_INVALID_ARG;
     host_lock(&lock);
-    int already=opened; opened=1;
+    int handle = -1;
+    for (int i = 1; i <= MAX_PAD_HANDLES; ++i) {
+        if (!s_pad_slots[i].active) {
+            handle = i;
+            break;
+        }
+    }
+    if (handle < 0) {
+        host_unlock(&lock);
+        return ERR_INVALID_HANDLE;
+    }
+    s_pad_slots[handle].active = 1;
+    s_pad_slots[handle].user = user;
+    s_pad_slots[handle].index = index;
     host_unlock(&lock);
-    if (already) return ERR_ALREADY_OPENED;
-    puts("Runtime: pad opened for user 1 (SDL gamepad or keyboard)");
-    return PAD_HANDLE;
+    printf("Runtime: pad opened handle=%d for user=%d index=%d type=%d\n", handle, user, index, type);
+    return handle;
 }
 static ABI int32_t pad_close(int32_t handle) {
-    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
-    opened=0; return 0;
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
+    host_lock(&lock);
+    s_pad_slots[handle].active = 0;
+    host_unlock(&lock);
+    printf("Runtime: pad closed handle=%d\n", handle);
+    return 0;
 }
+static uint32_t s_last_buttons = 0;
+uint32_t runtime_pad_get_buttons(void) {
+    return s_last_buttons;
+}
+
 static ABI int32_t pad_read_state(int32_t handle, PadData *data) {
-    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
     if (!data) return ERR_INVALID_ARG;
     host_lock(&lock);
     sample(data); ++reads;
+    if (data->buttons != s_last_buttons) {
+        s_last_buttons = data->buttons;
+        printf("Runtime: pad state handle=%d buttons=0x%x (Cross=%d, Circle=%d, Square=%d, Triangle=%d, Options=%d)\n",
+               handle, data->buttons,
+               !!(data->buttons & BTN_CROSS), !!(data->buttons & BTN_CIRCLE),
+               !!(data->buttons & BTN_SQUARE), !!(data->buttons & BTN_TRIANGLE),
+               !!(data->buttons & BTN_OPTIONS));
+    }
     host_unlock(&lock);
     return 0;
 }
 /* Buffered read: the port samples once per call, so one entry is returned. */
 static ABI int32_t pad_read(int32_t handle, PadData *data, int32_t count) {
-    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
     if (!data || count<1 || count>64) return ERR_INVALID_ARG;
     pad_read_state(handle,data);
     return 1;
 }
 static ABI int32_t pad_info(int32_t handle, ControllerInfo *info) {
-    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
     if (!info) return ERR_INVALID_ARG;
     memset(info,0,sizeof(*info));
     info->pixel_density=44.86f; info->resolution_x=1920; info->resolution_y=943;
     info->dead_zone_left=info->dead_zone_right=2;
-    info->connection_type=0; info->connected=1; info->device_class=0;
+    info->connection_type=1; info->connected=1; info->device_class=0;
     host_lock(&lock);
     current_gamepad();
     info->connected_count=connected_count ? connected_count : 1;
@@ -537,7 +570,7 @@ static ABI int32_t pad_info(int32_t handle, ControllerInfo *info) {
     return 0;
 }
 static ABI int32_t pad_vibration(int32_t handle, const uint8_t *param) {
-    if (handle!=PAD_HANDLE || !opened) return ERR_INVALID_HANDLE;
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
     if (!param) return ERR_INVALID_ARG;
     host_lock(&lock);
     SDL_Gamepad *g=current_gamepad();
@@ -545,13 +578,34 @@ static ABI int32_t pad_vibration(int32_t handle, const uint8_t *param) {
     host_unlock(&lock);
     return 0;
 }
-static ABI int32_t pad_ok_handle(int32_t handle) { return handle==PAD_HANDLE && opened ? 0 : ERR_INVALID_HANDLE; }
+typedef struct { uint8_t r, g, b, reserved; } PadColor;
+static ABI int32_t pad_set_light_bar(int32_t handle, const PadColor *param) {
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
+    if (!param) return ERR_INVALID_ARG;
+    host_lock(&lock);
+    SDL_Gamepad *g=current_gamepad();
+    if (g) SDL_SetGamepadLED(g, param->r, param->g, param->b);
+    host_unlock(&lock);
+    return 0;
+}
+static ABI int32_t pad_reset_light_bar(int32_t handle) {
+    if (handle < 1 || handle > MAX_PAD_HANDLES || !s_pad_slots[handle].active) return ERR_INVALID_HANDLE;
+    host_lock(&lock);
+    SDL_Gamepad *g=current_gamepad();
+    if (g) SDL_SetGamepadLED(g, 0, 0, 255);
+    host_unlock(&lock);
+    return 0;
+}
+static ABI int32_t pad_ok_handle(int32_t handle) {
+    return (handle >= 1 && handle <= MAX_PAD_HANDLES && s_pad_slots[handle].active) ? 0 : ERR_INVALID_HANDLE;
+}
 static ABI int32_t pad_ok_handle_flag(int32_t handle, uint8_t flag) { (void)flag; return pad_ok_handle(handle); }
 
 static const RuntimeExport exports[]={
     {"scePadInit",pad_init}, {"scePadOpen",pad_open}, {"scePadClose",pad_close},
     {"scePadReadState",pad_read_state}, {"scePadRead",pad_read},
     {"scePadGetControllerInformation",pad_info}, {"scePadSetVibration",pad_vibration},
+    {"scePadSetLightBar",pad_set_light_bar}, {"scePadResetLightBar",pad_reset_light_bar},
     {"scePadResetOrientation",pad_ok_handle},
     {"scePadSetAngularVelocityDeadbandState",pad_ok_handle_flag}, {"scePadSetTiltCorrectionState",pad_ok_handle_flag},
     {"scePadSetMotionSensorState",pad_ok_handle_flag},

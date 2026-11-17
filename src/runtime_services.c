@@ -7,7 +7,6 @@
  * Every entry here is an explicit contract; unknown functions still stop. */
 #define _GNU_SOURCE
 #include "runtime.h"
-#include "gpu/pesgpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,6 +61,11 @@ static ABI int32_t user_name(int32_t id,char *name,uint64_t size) {
     if (strlen(value)+1>size) return (int32_t)0x8096000a; /* BUFFER_TOO_SHORT */
     strcpy(name,value); return 0;
 }
+static ABI int32_t user_color(int32_t id, int32_t *color) {
+    (void)id;
+    if (color) *color = 0; /* blue, as for user 1 */
+    return 0;
+}
 static ABI int32_t user_event(int32_t *event) {
     if (!event) return USER_INVALID_ARGUMENT;
     host_lock(&lock);
@@ -108,7 +112,7 @@ static ABI int32_t net_term(void) { return 0; }
 static ABI int32_t *net_errno_loc(void) { return &net_errno; }
 static ABI int32_t net_pool_create(const char *name,int size,int flags) { (void)name; (void)size; (void)flags; return new_id(); }
 static ABI int32_t net_pool_destroy(int id) { (void)id; return 0; }
-static ABI int32_t net_unreachable(void) { net_errno=51; return NET_ENETUNREACH; }
+static ABI int32_t net_unreachable(void) { static unsigned n; if (n++<6) printf("DIAG: socket call -> ENETUNREACH\n"); net_errno=51; return NET_ENETUNREACH; }
 static ABI int32_t net_epoll_create(const char *name,int flags) { (void)name; (void)flags; return new_id(); }
 static ABI int32_t net_epoll_destroy(int id) { (void)id; return 0; }
 static ABI int32_t net_resolver_create(const char *name,int pool,int flags) { (void)name; (void)pool; (void)flags; return new_id(); }
@@ -133,27 +137,30 @@ static ABI const char *net_ntop(int af,const void *src,char *dst,uint32_t size) 
     return inet_ntop(AF_INET,src,dst,size);
 #endif
 }
-static ABI int32_t netctl_state(int32_t *state) { if (!state) return NET_CTL_INVALID_ADDR; *state=0; return 0; }
+static ABI int32_t netctl_state(int32_t *state) { static unsigned n; if (n++<6) printf("DIAG: sceNetCtlGetState polled\n"); if (!state) return NET_CTL_INVALID_ADDR; *state=0; return 0; }
 static ABI int32_t netctl_info(int code,void *info) { (void)code; (void)info; return NET_CTL_NOT_CONNECTED; }
-static ABI int32_t netctl_register(void *cb,void *arg,int32_t *cid) { (void)cb; (void)arg; if (!cid) return NET_CTL_INVALID_ADDR; *cid=new_id(); return 0; }
-static ABI int32_t netctl_check(void) { return 0; }
+static ABI int32_t netctl_register(void *cb,void *arg,int32_t *cid) { static unsigned n; if (n++<6) printf("DIAG: sceNetCtlRegisterCallback registered\n"); (void)cb; (void)arg; if (!cid) return NET_CTL_INVALID_ADDR; *cid=new_id(); return 0; }
+static ABI int32_t netctl_check(void) { static unsigned n; if (n++<6) printf("DIAG: sceNetCtlCheckCallback pumped\n"); return 0; }
 static ABI int32_t netctl_unregister(int cid) { (void)cid; return 0; }
 static ABI int32_t netctl_nat(uint32_t *info) {
     if (!info) return NET_CTL_INVALID_ADDR;
     info[1]=0; info[2]=3; info[3]=0; /* stun failed, NAT type 3, no mapped address */
     return 0;
 }
+static ABI int32_t netctl_init(void) { note("NetCtl initialized (offline)"); return 0; }
+static ABI int32_t netctl_result(int code, int *result) { (void)code; if (result) *result = NET_CTL_NOT_CONNECTED; return 0; }
 static ABI int32_t lib_init_id(void) { return new_id(); }
 static ABI int32_t ok_void(void) { return 0; }
 static ABI int32_t http_fail(void) { return HTTP_NETWORK; }
 /* Objects are created so setup code proceeds; any transfer fails as unplugged. */
-static ABI int32_t http_object(void) { return new_id(); }
+static ABI int32_t http_object(void) { static unsigned n; if (n++<6) printf("DIAG: HTTP object created\n"); return new_id(); }
 static ABI int32_t http_epoll(int32_t ctx,void **handle) {
     (void)ctx;
     if (!handle) return (int32_t)0x80431077; /* HTTP INVALID_VALUE */
     *handle=(void *)(uintptr_t)(0x100+new_id()); return 0;
 }
 static ABI int32_t http_wait(void *handle,void *events,int32_t max,int64_t timeout) {
+    static unsigned n; if (n++<6) printf("DIAG: HTTP wait polled (returns no events)\n");
     (void)handle; (void)events; (void)max;
     if (timeout>0) host_sleep_ns((uint64_t)timeout*1000);
     return 0; /* no events: nothing is in flight */
@@ -190,18 +197,29 @@ static ABI int32_t voice_info(uint32_t port,uint32_t *info) {
 /* ---- Common dialogs: nothing is displayed; an opened dialog finishes. ---- */
 typedef struct { const char *name; int initialized, status; } Dialog;
 static Dialog dialogs[]={{"CommonDialog",0,0},{"MsgDialog",0,0},{"SaveDataDialog",0,0},
-                         {"NpProfileDialog",0,0},{"NpCommerceDialog",0,0},{"ImeDialog",0,0}};
+                         {"NpProfileDialog",0,0},{"NpCommerceDialog",0,0},{"ImeDialog",0,0},
+                         {"ErrorDialog",0,0},{"InvitationDialog",0,0},{"UsbStorageDialog",0,0}};
 static ABI int32_t common_init(void) { return 0; }
 static int32_t dialog_init(int i) {
     if (dialogs[i].initialized) return (int32_t)0x80B80004;
     dialogs[i].initialized=1; dialogs[i].status=1; return 0;
 }
+static unsigned last_save_dialog_mode;
 static int32_t dialog_open(int i) {
     if (!dialogs[i].initialized) return DIALOG_NOT_INITIALIZED;
-    printf("Runtime: %s opened; completed immediately (no dialog UI yet)\n",dialogs[i].name);
-    dialogs[i].status=3; return 0;
-}
-static int32_t dialog_status(int i) { return dialogs[i].status; }
+    /* Real CommonDialog protocol: a PROGRESS_BAR dialog stays RUNNING (status=2) while the
+     * game streams its work (PES's save writer closes it itself when the loop is done).
+     * Returning FINISHED immediately made PES abort its 5 MiB EDIT payload after the first
+     * 1 MiB chunk ("Unable to Save."). */
+    if (i == 2 && last_save_dialog_mode == 5u /* PROGRESS_BAR */) {
+        dialogs[i].status = 2;
+        printf("Runtime: SaveDataDialog progress keeps RUNNING (guest closes it)\n");
+    } else {
+        dialogs[i].status = 3;
+        printf("Runtime: %s opened; completed immediately (no dialog UI yet)\n", dialogs[i].name);
+    }
+    return 0;
+}static int32_t dialog_status(int i) { return dialogs[i].status; }
 static int32_t dialog_term(int i) {
     if (!dialogs[i].initialized) return DIALOG_NOT_INITIALIZED;
     dialogs[i].initialized=0; dialogs[i].status=0; return 0;
@@ -211,7 +229,93 @@ static int32_t dialog_term(int i) {
     static ABI int32_t tag##_open(const void *p) { (void)p; return dialog_open(i); } \
     static ABI int32_t tag##_status(void) { return dialog_status(i); } \
     static ABI int32_t tag##_term(void) { return dialog_term(i); }
-DIALOG(msg,1) DIALOG(save,2) DIALOG(profile,3) DIALOG(commerce,4)
+DIALOG(msg,1) DIALOG(profile,3) DIALOG(commerce,4)
+DIALOG(error,6) DIALOG(invitation,7) DIALOG(usb,8)
+static ABI int32_t save_init(void) { return dialog_init(2); }static ABI int32_t save_status(void) { return dialog_status(2); }
+static ABI int32_t save_term(void) { return dialog_term(2); }
+static ABI int32_t save_open(const void *p) {
+    if (p) {
+        const uint8_t *b = (const uint8_t *)p;
+        /* Real layout (shadPS4): baseParam(0x30), s32 size, mode, dispType, -, then
+         * AnimationParam*, items, userMsgParam, sysMsgParam, errorCodeParam,
+         * progressBarParam, userData, optionParam. */
+        unsigned size = *(const unsigned *)(b + 0x30);
+        unsigned mode = *(const unsigned *)(b + 0x34);
+        unsigned disp = *(const unsigned *)(b + 0x38);
+        const void *user_p   = *(const void **)(b + 0x50);
+        const void *sys_p    = *(const void **)(b + 0x58);
+        const void *err_p    = *(const void **)(b + 0x60);
+        const void *prog_p   = *(const void **)(b + 0x68);
+        last_save_dialog_mode = mode;
+        printf("Runtime: SaveDataDialog open: size=%u mode=%u disp=%u\n", size, mode, disp);
+        if (user_p) {
+            const unsigned *w = (const unsigned *)user_p;
+            const char *mptr = *(const char **)((const uint8_t *)user_p + 8);
+            if (mptr) {
+                char msg[160];
+                for (unsigned i = 0; i < sizeof(msg) - 1 && mptr[i]; ++i) msg[i] = mptr[i] < 0x20 ? '?' : mptr[i];
+                msg[sizeof(msg) - 1] = 0;
+                printf("  USER_MSG: buttonType=%u msgType=%u msg=\"%s\"\n", w[0], w[1], msg);
+            } else {
+                printf("  USER_MSG: buttonType=%u msgType=%u msg=(null)\n", w[0], w[1]);
+            }
+        }
+        if (sys_p) {
+            const unsigned *w = (const unsigned *)sys_p;
+            unsigned long long val = *(const unsigned long long *)((const uint8_t *)sys_p + 8);
+            printf("  SYS_MSG: msgType=%u value=%llu\n", w[0], (unsigned long long)val);
+        }
+        if (err_p) {
+            const unsigned *w = (const unsigned *)err_p;
+            printf("  ERROR_CODE: code=0x%x\n", w[0]);
+        }
+        if (prog_p) {
+            const unsigned *w = (const unsigned *)prog_p;
+            printf("  PROGRESS: barType=%u msgPtr=%p sysMsgType=%u\n", w[0],
+                   *(const void **)((const uint8_t *)prog_p + 8), *(const unsigned *)((const uint8_t *)prog_p + 16));
+        }
+    }
+    return dialog_open(2);
+}
+static ABI int32_t dialog_generic_close(void) {
+    for (size_t i = 0; i < sizeof(dialogs)/sizeof(dialogs[0]); ++i) {
+        if (dialogs[i].initialized) dialogs[i].status = 1; /* Reset to INITIALIZED */
+    }
+    return 0;
+}
+static ABI int32_t dialog_generic_result(void *result) {
+    if (result) {
+        memset(result,0,16);
+        int32_t *p = (int32_t *)result;
+        p[0] = 0; /* mode */
+        p[1] = 0; /* result = 0 (SCE_OK) */
+        p[2] = 1; /* buttonId = 1 (SCE_COMMON_DIALOG_BUTTON_ID_OK) */
+    }
+    return 0;
+}
+static ABI int32_t save_dialog_close(void) {
+    printf("Runtime: SaveDataDialog closed\n");
+    /* Real protocol: Close on a RUNNING dialog transitions it to FINISHED (the game's UI
+     * then polls UpdateStatus -> FINISHED and calls GetResult). Resetting to INITIALIZED
+     * froze PES's post-save flow on a blank screen. */
+    dialogs[2].status = 3; /* FINISHED */
+    return 0;
+}
+static ABI int32_t save_dialog_result(void *result) {
+    if (result) {
+        /* Real OrbisSaveDataDialogResult (shadPS4): { mode @0, result @4, buttonId @8,
+         * pad, DirName* @0x10, Param* @0x18, void* userData @0x20, reserved[32] }. */
+        memset(result,0,0x50);
+        unsigned *w = (unsigned *)result;
+        w[0] = last_save_dialog_mode; /* mode of the dialog that was opened */
+        w[1] = 0;                     /* result = OK */
+        w[2] = 1;                     /* buttonId = OK */
+    }
+    printf("Runtime: sceSaveDataDialogGetResult -> Success (buttonId=1 / OK)\n");
+    return 0;
+}
+static ABI int32_t dialog_generic_progress(int32_t value) { (void)value; return 0; }
+static ABI int32_t ime_panel_size(void *param) { if (param) memset(param, 0, 16); return 0; }
 static ABI int32_t profile_result(void *result) { if (result) memset(result,0,4); return 0; }
 /* ImeDialog: text typed on the keyboard into the game window (title bar shows it).
  * OrbisImeDialogParam: user, type, languages(8), enter label, method, filter,
@@ -263,18 +367,12 @@ static ABI int32_t ime_init(const ImeParam *param, const void *extended) {
     utf16_to_utf8(param->title,128,prompt,sizeof(prompt));
     const char *preset=getenv("PES_IME_TEXT");
     if (preset) { ime_complete(0,preset); return 0; }
-    if (!pesgpu_text_input_begin(initial,prompt[0] ? prompt : "Text")) {
-        const char *name=getenv("PES_USER_NAME");
-        ime_complete(0,name ? name : initial[0] ? initial : "Player");
-    } else printf("Runtime: ImeDialog opened: type in the game window, Enter to confirm, Esc to cancel\n");
+    (void)prompt; /* no on-screen keyboard yet: complete at once with the user name or the initial text */
+    const char *name=getenv("PES_USER_NAME");
+    ime_complete(0,name ? name : initial[0] ? initial : "Player");
     return 0;
 }
 static ABI int32_t ime_status(void) {
-    if (ime.running) {
-        char text[512];
-        int state=pesgpu_text_input_poll(text,sizeof(text));
-        if (state) ime_complete(state==1 ? 0 : 1,text);
-    }
     return ime.running ? 1 : ime.finished ? 2 : 0; /* Running / Finished / None */
 }
 static ABI int32_t ime_result(uint32_t *result) {
@@ -359,7 +457,6 @@ static void trophy_award(int id) { /* under lock */
     FILE *f=fopen(path,"a");
     if (f) { fprintf(f,"%d %lld %s\n",id,(long long)trophy_times[id],trophies[id].name); fclose(f); }
     printf("Runtime: trophy %d unlocked: %s\n",id,trophies[id].name);
-    pesgpu_trophy_popup(trophies[id].name,trophies[id].grade);
 }
 /* Overlay's trophy list (any thread): 0 past the last id; *unlocked_time is 0 while locked. */
 int runtime_trophy(int id,const char **name,const char **description,int *grade,int *hidden,int64_t *unlocked_time) {
@@ -412,9 +509,39 @@ static ABI int32_t trophy_info(int32_t ctx,int32_t handle,int32_t id,void *detai
     }
     return 0;
 }
+static ABI int32_t trophy_destroy_context(int32_t ctx) { (void)ctx; return 0; }
+static ABI int32_t trophy_abort_handle(int32_t handle) { (void)handle; return 0; }
+static ABI int32_t trophy_destroy_handle(int32_t handle) { (void)handle; return 0; }
+static ABI int32_t trophy_unlock_state(int32_t ctx, int32_t handle, uint32_t *flags, uint32_t *count) {
+    (void)ctx; (void)handle;
+    host_lock(&lock);
+    trophies_load();
+    if (flags) {
+        flags[0] = (uint32_t)(trophies_unlocked & 0xFFFFFFFF);
+        flags[1] = (uint32_t)(trophies_unlocked >> 32);
+    }
+    if (count) {
+        *count = TROPHY_COUNT;
+    }
+    host_unlock(&lock);
+    return 0;
+}
+static ABI int32_t np_get_account_id(int32_t user, uint64_t *account_id) {
+    (void)user;
+    if (account_id) *account_id = 0x12345678ULL;
+    return 0;
+}
+static ABI int32_t np_commerce_show_icon(const void *p) { (void)p; return 0; }
+static ABI int32_t np_word_filter_abort(int32_t req) { (void)req; return 0; }
+static ABI int32_t np_word_filter_censor(const void *p) { (void)p; return 0; }
 
 /* ---- PlayGo: fully installed package ---- */
 static int playgo_handle, playgo_chunks=-1;
+typedef struct ScePlayGoProgress {
+    uint64_t progress;
+    uint64_t total;
+} ScePlayGoProgress;
+
 static ABI int32_t playgo_init(const void *params) {
     (void)params;
     int fd=(int)runtime_file_open("/app0/sce_sys/playgo-chunk.dat",0,0);
@@ -430,7 +557,9 @@ static ABI int32_t playgo_init(const void *params) {
 static ABI int32_t playgo_open(int32_t *handle,const void *param) {
     (void)param;
     if (!handle) return PLAYGO_BAD_POINTER;
-    playgo_handle=1; *handle=1; return 0;
+    playgo_handle=1; *handle=1;
+    printf("Runtime: scePlayGoOpen -> handle=1\n");
+    return 0;
 }
 static ABI int32_t playgo_chunk_ids(int32_t handle,uint16_t *ids,uint32_t count,uint32_t *out) {
     if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
@@ -442,16 +571,62 @@ static ABI int32_t playgo_chunk_ids(int32_t handle,uint16_t *ids,uint32_t count,
     *out=n; return 0;
 }
 static ABI int32_t playgo_locus(int32_t handle,const uint16_t *ids,uint32_t count,int8_t *loci) {
-    if (handle!=playgo_handle || !handle) return PLAYGO_BAD_HANDLE;
+    (void)handle;
     if (!ids || !loci) return PLAYGO_BAD_POINTER;
     if (!count) return PLAYGO_BAD_SIZE;
     for (uint32_t i=0;i<count;++i) {
-        if (ids[i]>=playgo_chunks) return PLAYGO_BAD_CHUNK;
-        loci[i]=3; /* LocalFast */
+        loci[i]=3; /* LocalFast (3): chunk is present and fast on local disk */
     }
     return 0;
 }
-static ABI int32_t playgo_speed(int32_t handle,int32_t speed) { (void)speed; return handle==playgo_handle && handle ? 0 : PLAYGO_BAD_HANDLE; }
+static ABI int32_t playgo_speed(int32_t handle,int32_t speed) {
+    (void)handle; (void)speed;
+    return 0;
+}
+static ABI int32_t playgo_close(int32_t handle) {
+    (void)handle;
+    printf("Runtime: scePlayGoClose(handle=%d)\n", handle);
+    return 0;
+}
+static ABI int32_t playgo_get_speed(int32_t handle, int32_t *speed) {
+    (void)handle;
+    if (speed) *speed = 1; /* Normal */
+    return 0;
+}
+static ABI int32_t playgo_get_lang(int32_t handle, uint32_t *mask) {
+    (void)handle;
+    if (mask) *mask = 0xFFFFFFFF;
+    return 0;
+}
+static ABI int32_t playgo_set_lang(int32_t handle, uint32_t mask) {
+    (void)handle; (void)mask;
+    return 0;
+}
+static ABI int32_t playgo_get_progress(int32_t handle, const uint16_t *chunk_ids, uint32_t count, ScePlayGoProgress *progress) {
+    (void)handle; (void)chunk_ids; (void)count;
+    if (!progress) return PLAYGO_BAD_POINTER;
+    progress->progress = 1000000000ULL;
+    progress->total = 1000000000ULL;
+    return 0;
+}
+static ABI int32_t playgo_get_todo(int32_t handle, uint16_t *todo_ids, uint32_t count, uint32_t *out_count) {
+    (void)handle; (void)todo_ids; (void)count;
+    if (out_count) *out_count = 0;
+    return 0;
+}
+static ABI int32_t playgo_set_todo(int32_t handle, const uint16_t *chunks, uint32_t count) {
+    (void)handle; (void)chunks; (void)count;
+    return 0;
+}
+static ABI int32_t playgo_term(void) {
+    printf("Runtime: scePlayGoTerminate\n");
+    return 0;
+}
+
+/* ---- GameLiveStreaming ---- */
+static ABI int32_t live_stream_init(void *param) { (void)param; note("GameLiveStreaming initialized (offline)"); return 0; }
+static ABI int32_t live_stream_enable(int32_t enable) { (void)enable; return 0; }
+static ABI int32_t live_stream_term(void) { return 0; }
 
 /* ---- DiscMap: the game is fully installed, no disc bitmap exists ---- */
 #define DISC_MAP_NO_BITMAP ((int32_t)0x81100004)
@@ -473,11 +648,51 @@ static ABI int32_t mouse_read(int32_t handle,unsigned char *data,int32_t count) 
 static ABI int32_t mouse_close(int32_t handle) { (void)handle; return 0; }
 static ABI int32_t audio_in_open(void) { return AUDIO_IN_NOT_OPENED; }
 
+/* ---- Coredump / Diagnostics ---- */
+static ABI int32_t coredump_register(void *handler, size_t size, void *arg) {
+    (void)handler; (void)size; (void)arg;
+    note("Coredump: registered custom crash handler (OK)");
+    return 0;
+}
+
+/* ---- ScreenShot ---- */
+static ABI int32_t screenshot_enable(void) { return 0; }
+static ABI int32_t screenshot_disable(void) { return 0; }
+
+/* ---- Sysmodule ---- */
+static ABI int32_t sysmodule_is_loaded(uint16_t id) {
+    (void)id;
+    return 0;
+}
+static ABI int32_t sysmodule_load(uint16_t id) {
+    printf("Runtime: sceSysmoduleLoadModule(0x%04x)\n", id);
+    return 0;
+}
+static ABI int32_t sysmodule_unload(uint16_t id) {
+    (void)id;
+    return 0;
+}
+
+/* ---- SharePlay ---- */
+static ABI int32_t shareplay_init(void *param) { (void)param; note("SharePlay initialized (offline)"); return 0; }
+static ABI int32_t shareplay_term(void) { return 0; }
+static ABI int32_t shareplay_prohibit(int32_t prohibit) { (void)prohibit; return 0; }
+static ABI int32_t shareplay_conn_info(void *info) { (void)info; return (int32_t)0x80AF0001; }
+
+/* ---- WebBrowserDialog ---- */
+static ABI int32_t browser_dialog_init(void) { return 0; }
+static ABI int32_t browser_dialog_open(const void *param) { (void)param; return 0; }
+static ABI int32_t browser_dialog_close(void) { return 0; }
+static ABI int32_t browser_dialog_term(void) { return 0; }
+static ABI int32_t browser_dialog_status(void) { return 2; /* Finished */ }
+static ABI int32_t browser_dialog_result(void *result) { (void)result; return 0; }
+
 
 static const RuntimeExport exports[]={
     {"sceUserServiceInitialize",user_initialize}, {"sceUserServiceTerminate",user_terminate},
     {"sceUserServiceGetInitialUser",user_initial}, {"sceUserServiceGetLoginUserIdList",user_list},
     {"sceUserServiceGetUserName",user_name}, {"sceUserServiceGetEvent",user_event},
+    {"sceUserServiceGetUserColor",user_color},
     {"sceSystemServiceParamGetInt",system_param}, {"sceSystemServiceGetStatus",system_status},
     {"sceSystemServiceReceiveEvent",system_event}, {"sceSystemServiceHideSplashScreen",hide_splash},
     {"sceSystemServiceLaunchWebBrowser",launch_browser},
@@ -495,7 +710,9 @@ static const RuntimeExport exports[]={
     {"sceNetSocketClose",net_unreachable}, {"sceNetSocketAbort",net_unreachable},
     {"sceNetEpollControl",net_unreachable}, {"sceNetEpollWait",net_unreachable}, {"sceNetEpollAbort",net_unreachable},
     {"sceNetResolverStartNtoa",net_unreachable}, {"sceNetResolverStartAton",net_unreachable},
+    {"sceNetCtlInit",netctl_init}, {"sceNetCtlTerm",ok_void},
     {"sceNetCtlGetState",netctl_state}, {"sceNetCtlGetInfo",netctl_info},
+    {"sceNetCtlGetResult",netctl_result},
     {"sceNetCtlRegisterCallback",netctl_register}, {"sceNetCtlCheckCallback",netctl_check},
     {"sceNetCtlUnregisterCallback",netctl_unregister}, {"sceNetCtlGetNatInfo",netctl_nat},
     {"sceSslInit",lib_init_id}, {"sceSslTerm",ok_void},
@@ -588,6 +805,63 @@ static const RuntimeExport exports[]={
     {"sceAudioInOpen",audio_in_open},
     {"sceDiscMapIsRequestOnHDD",discmap_on_hdd}, {"sceDiscMap_8A828CAEE7EDD5E9",discmap_8a82},
     {"sceVoiceInit",ok_void}, {"sceVoiceEnd",ok_void},
+    {"sceErrorDialogInitialize",error_init}, {"sceErrorDialogOpen",error_open},
+    {"sceErrorDialogUpdateStatus",error_status}, {"sceErrorDialogClose",dialog_generic_close},
+    {"sceErrorDialogTerminate",error_term},
+    {"sceInvitationDialogInitialize",invitation_init}, {"sceInvitationDialogOpen",invitation_open},
+    {"sceInvitationDialogUpdateStatus",invitation_status}, {"sceInvitationDialogClose",dialog_generic_close},
+    {"sceInvitationDialogTerminate",invitation_term},
+    {"sceUsbStorageDialogInitialize",usb_init}, {"sceUsbStorageDialogOpen",usb_open},
+    {"sceUsbStorageDialogUpdateStatus",usb_status}, {"sceUsbStorageDialogClose",dialog_generic_close},
+    {"sceUsbStorageDialogTerminate",usb_term}, {"sceUsbStorageDialogGetResult",dialog_generic_result},
+    {"sceMsgDialogClose",dialog_generic_close},
+    {"sceSaveDataDialogClose",save_dialog_close},
+    {"sceSaveDataDialogGetResult",save_dialog_result},
+    {"sceSaveDataDialogProgressBarSetValue",dialog_generic_progress},
+    {"sceNpProfileDialogClose",dialog_generic_close},
+    {"sceNpCommerceDialogClose",dialog_generic_close},
+    {"sceImeDialogGetPanelSize",ime_panel_size},
+    {"sceNpTrophyDestroyContext",trophy_destroy_context},
+    {"sceNpTrophyAbortHandle",trophy_abort_handle},
+    {"sceNpTrophyDestroyHandle",trophy_destroy_handle},
+    {"sceNpTrophyGetTrophyUnlockState",trophy_unlock_state},
+    {"sceNpGetAccountId",np_get_account_id},
+    {"sceNpCommerceShowPsStoreIcon",np_commerce_show_icon},
+    {"sceNpWordFilterAbortRequest",np_word_filter_abort},
+    {"sceNpWordFilterCensorComment",np_word_filter_censor},
+    {"sceCoredumpRegisterCoredumpHandler",coredump_register},
+    {"sceCoredumpAttachMemoryRegionAsUserFile",ok_void},
+    {"sceCoredumpAttachUserFile",ok_void},
+    {"sceCoredumpGetStopInfoCpu",ok_void},
+    {"sceCoredumpGetStopInfoGpu",ok_void},
+    {"sceCoredumpGetThreadContextInfo",ok_void},
+    {"sceCoredumpWriteUserData",ok_void},
+    {"sceGameLiveStreamingEnableLiveStreaming",live_stream_enable},
+    {"sceGameLiveStreamingInitialize",live_stream_init},
+    {"sceGameLiveStreamingTerminate",live_stream_term},
+    {"scePlayGoClose",playgo_close},
+    {"scePlayGoGetInstallSpeed",playgo_get_speed},
+    {"scePlayGoGetLanguageMask",playgo_get_lang},
+    {"scePlayGoSetLanguageMask",playgo_set_lang},
+    {"scePlayGoGetProgress",playgo_get_progress},
+    {"scePlayGoGetToDoList",playgo_get_todo},
+    {"scePlayGoSetToDoList",playgo_set_todo},
+    {"scePlayGoTerminate",playgo_term},
+    {"sceScreenShotDisable",screenshot_disable},
+    {"sceScreenShotEnable",screenshot_enable},
+    {"sceSysmoduleIsLoaded",sysmodule_is_loaded},
+    {"sceSysmoduleLoadModule",sysmodule_load},
+    {"sceSysmoduleUnloadModule",sysmodule_unload},
+    {"sceSharePlayInitialize",shareplay_init},
+    {"sceSharePlayTerminate",shareplay_term},
+    {"sceSharePlaySetProhibition",shareplay_prohibit},
+    {"sceSharePlayGetCurrentConnectionInfo",shareplay_conn_info},
+    {"sceWebBrowserDialogInitialize",browser_dialog_init},
+    {"sceWebBrowserDialogOpen",browser_dialog_open},
+    {"sceWebBrowserDialogClose",browser_dialog_close},
+    {"sceWebBrowserDialogTerminate",browser_dialog_term},
+    {"sceWebBrowserDialogUpdateStatus",browser_dialog_status},
+    {"sceWebBrowserDialogGetResult",browser_dialog_result},
 };
 uintptr_t runtime_services_resolve(const char *name) {
     return RUNTIME_LOOKUP(exports,name);
