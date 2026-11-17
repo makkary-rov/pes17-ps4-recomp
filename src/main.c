@@ -45,7 +45,6 @@ static LinkedModule modules[16];
 static uint64_t module_count;
 static int entered_game;
 static int gpu_enabled;
-int vulkan_smoke(void);
 
 static __attribute__((noreturn)) void fail(const char *message) { fprintf(stderr, "ERROR: %s\n", message); exit(1); }
 
@@ -717,7 +716,6 @@ int main(int argc, char **argv) {
     mallopt(M_ARENA_MAX,1);
     mallopt(M_MMAP_THRESHOLD,32*1024*1024);
 #endif
-    if (argc == 2 && !strcmp(argv[1], "--vulkan-only")) return vulkan_smoke();
     check_cpu();
     int cpu_only = 0, strict_imports = 0;
     unsigned timeout_seconds = 10;
@@ -733,7 +731,7 @@ int main(int argc, char **argv) {
         else { fprintf(stderr, "Unknown option: %s\n", argv[i]); return 1; }
     }
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--timeout seconds] | --vulkan-only\n", argv[0]);
+        fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--timeout seconds]\n", argv[0]);
         return 1;
     }
     if (content_profile) {
@@ -963,7 +961,6 @@ int main(int argc, char **argv) {
     /* Libraries loaded since main (GPU driver, SDL) may have installed their own. */
     SetUnhandledExceptionFilter(unhandled_filter);
 #endif
-    if (!cpu_only) pesgpu_start_online();
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     entered_game=1;
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};

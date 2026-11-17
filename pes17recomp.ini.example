@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+; pes17recomp.ini example. Copy this file to pes17recomp.ini (git-ignored) and edit the copy.
+; PES_CONFIG=<path> overrides the file location; environment variables override the file.
+; Every line below is commented out: it shows the code default. Remove the leading ';' to change a value.
+; Format: key=value. Booleans are 0 or 1.
+
+; menu_language=en  ; en or ru, the settings menu language
+; upscaler=fsr3  ; off, fsr3, fsr4, fsr411, taa, dlss
+; preset=0  ; 0 native AA, 1 quality, 2 balanced, 3 performance, 4 ultra performance
+; dlss_preset=0  ; 0 auto, or a DLSS model name
+; sharpen=1  ; upscaler sharpening
+; sharpness=0.30  ; sharpening strength
+; jitter=1  ; camera jitter for the upscaler
+; reactive=0  ; reactive mask
+; object_motion=1  ; object motion vectors
+; reactive_scale=1.00  ; reactive mask scale
+; reactive_threshold=0.20  ; reactive mask threshold
+; reactive_max=0.90  ; reactive mask maximum
+; debug_view=0  ; 0 none, 1 reactive mask, 2 motion
+; show_fps=0  ; frame rate counter
+; menu_pos=  ; settings menu position x,y (0..1); unset until the menu is moved
+; fsr4_auto_exposure=1  ; FSR 4 auto exposure
+; fsr4_invert_jitter=0  ; FSR 4 jitter sign
+; effect_chromatic_aberration=1  ; chromatic aberration effect
+; effect_dof=1  ; depth of field effect
+; effect_motion_blur=1  ; motion blur effect
+; effect_ssao=1  ; ambient occlusion (SSAO) effect
+; effect_game_aa=1  ; the game's own anti-aliasing
+; effect_dynamic_shadows=1  ; shadows from dynamic lights
+; effect_ssr=0  ; screen-space reflections (not in the original game)
+; skip_intro=0  ; skip startup intros
+; debug_camera=0  ; free camera (Cross + L3)
+; debug_menu=0  ; debug menu (needs font files)
+; fullscreen=0  ; borderless fullscreen at the desktop size (F11 toggles)
+; live_resolution=0  ; 0 off, 1 on, auto (strong discrete GPUs); applied on restart
+; output_res=1920x1080  ; output size, one of the menu's sizes
+; model_lod=0  ; -2 highest .. 2 lowest, 0 the game's own
+; graphics_controls=0  ; enable the graphics adjustments below
+; graphics_vignette=1  ; vignette
+; graphics_ao_strength=1.00  ; ambient occlusion strength (0..2)
+; graphics_shadow_scale=1.00  ; shadow scale (1..3)
+; graphics_bloom=1.00  ; bloom (0..1)
+; graphics_saturation=1.00  ; saturation (0..2)
+; camera_controls=0  ; startup engine hook for camera controls (opt-in)
+; camera_fov_scale=1.00  ; field of view scale (1..1.5)
+; camera_distance_scale=1.00  ; camera distance scale (0.5..1.5)
+; camera_height_scale=1.00  ; camera height scale (0.5..1.5)
+; widescreen=1  ; widescreen
+; pc_controls=1  ; PC control scheme
+; mouse_camera=1  ; mouse controls the camera
+; mouse_menu=1  ; mouse controls the menu
+; mouse_invert_x=0  ; invert mouse X
+; mouse_invert_y=0  ; invert mouse Y
+; mouse_auto_rotation=0  ; automatic camera rotation
+; mouse_sensitivity=5  ; mouse sensitivity
+; change_appearance=0  ; next launch: engine feature
+; rebirth=0  ; next launch: engine feature
+
+; Controls. key.<input>= takes SDL key names, pad.<input>= takes SDL gamepad button names,
+; comma-separated; an empty value leaves the input unbound. Gamepad names as SDL's
+; (a b x y back start leftstick rightstick leftshoulder rightshoulder dpup dpdown dpleft dpright
+; touchpad misc1 paddle1-4 lefttrigger righttrigger).
+; key.cross=Space  ; PS4 cross
+; key.circle=Left Shift  ; PS4 circle
+; key.square=E  ; PS4 square
+; key.triangle=Q  ; PS4 triangle
+; key.l1=1  ; PS4 L1
+; key.r1=3  ; PS4 R1
+; key.l2=R  ; PS4 L2
+; key.r2=F  ; PS4 R2
+; key.l3=Z  ; PS4 L3
+; key.r3=C  ; PS4 R3
+; key.options=Return  ; PS4 options
+; key.touchpad=Tab  ; touchpad (left-side click)
+; key.touchpad_right=Backspace  ; touchpad right side
+; key.up=I  ; d-pad up
+; key.down=K  ; d-pad down
+; key.left=J  ; d-pad left
+; key.right=L  ; d-pad right
+; key.move_up=W  ; left stick up
+; key.move_down=S  ; left stick down
+; key.move_left=A  ; left stick left
+; key.move_right=D  ; left stick right
+; key.look_up=Up  ; right stick up
+; key.look_down=Down  ; right stick down
+; key.look_left=Left  ; right stick left
+; key.look_right=Right  ; right stick right
+; pad.cross=a  ; PS4 cross
+; pad.circle=b  ; PS4 circle
+; pad.square=x  ; PS4 square
+; pad.triangle=y  ; PS4 triangle
+; pad.l1=leftshoulder  ; PS4 L1
+; pad.r1=rightshoulder  ; PS4 R1
+; pad.l2=lefttrigger  ; PS4 L2
+; pad.r2=righttrigger  ; PS4 R2
+; pad.l3=leftstick  ; PS4 L3
+; pad.r3=rightstick  ; PS4 R3
+; pad.options=start  ; PS4 options
+; pad.touchpad=back,touchpad  ; touchpad
+; pad.up=dpup  ; d-pad up
+; pad.down=dpdown  ; d-pad down
+; pad.left=dpleft  ; d-pad left
+; pad.right=dpright  ; d-pad right

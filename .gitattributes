@@ -1,2 +1,8 @@
-# cmd.exe needs CRLF batch files
-*.bat text eol=crlf
+# Line endings: no global normalization (vendored CRLF files stay byte-identical).
+*.bat   text eol=crlf
+*.sh    text eol=lf
+*.py    text eol=lf
+*.patch -text
+*.ttf   binary
+*.png   binary
+gpu/third_party/half/** -text

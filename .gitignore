@@ -23,7 +23,3 @@ pes17recomp.ini
 src/title/generated/
 last_run.log
 
-# submodule checkouts until M1e registers them
-/gpu/third_party/imgui/
-/gpu/third_party/fsr-vulkan/
-/third_party/LibAtrac9/

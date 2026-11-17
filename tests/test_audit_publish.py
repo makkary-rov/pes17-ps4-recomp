@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+import unittest
+
+from paths import ROOT  # noqa: F401  (puts scripts/ on sys.path)
+import audit_publish as ap
+
+# Terms that the audit rejects are assembled at run time so this file has no R0 hit.
+BLOOD = 'blood' + 'borne'
+BAD_GPU = 'bb' + 'gpu'
+BAD_PORT = 'bb' + 'port'
+BAD_UNDERSCORE = 'BB' + '_FOO'
+SL2 = 'DATA0000' + '.' + 'sl2'
+EBOOT_LOWER = 'eboot.bin'
+EBOOT_UPPER = 'EBOOT.BIN'
+
+
+class NameTests(unittest.TestCase):
+    def test_rejected_names(self):
+        for rel in (EBOOT_LOWER, EBOOT_UPPER, 'out/boot-linked.bin', 'x.dmp', SL2,
+                    'user/savedata/a.dat', 'src/title/generated/t.inc', 'gpu/shim/pes_gnm_table.inc'):
+            with self.subTest(rel=rel):
+                self.assertTrue(ap.check_name(rel), rel)
+
+    def test_accepted_names(self):
+        for rel in ('src/main.c', 'scripts/prepare.py',
+                    'gpu/third_party/gcn/include/gcn/si_ci_vi_merged_offset.h'):
+            with self.subTest(rel=rel):
+                self.assertEqual(ap.check_name(rel), [], rel)
+
+
+class SizeTests(unittest.TestCase):
+    MIB2 = 2 << 20
+
+    def test_large_text_passes(self):
+        self.assertEqual(ap.check_size('x.h', b'a' * self.MIB2), [])
+
+    def test_large_text_with_nul_fails(self):
+        self.assertTrue(ap.check_size('x.h', b'\0' + b'a' * self.MIB2))
+
+    def test_large_bin_fails(self):
+        self.assertTrue(ap.check_size('x.bin', b'a' * self.MIB2))
+
+
+class R0Tests(unittest.TestCase):
+    def test_hits(self):
+        self.assertTrue(ap.r0_hits('src/x.c', 'line ' + BLOOD + '\n', set()))
+        self.assertTrue(ap.r0_hits('src/x.c', BAD_UNDERSCORE + '\n', set()))
+        self.assertTrue(ap.r0_hits('src/x.c', BAD_PORT + ':\n', set()))
+
+    def test_no_hits(self):
+        self.assertEqual(ap.r0_hits('src/x.c', 'SUBB_U32\nUBB_U32\nhunt\n', set()), [])
+
+    def test_allowlisted_line_suppressed(self):
+        line = 'line ' + BLOOD
+        self.assertEqual(ap.r0_hits('src/x.c', line + '\n', {('src/x.c', line)}), [])
+
+    def test_licence_paths_skipped(self):
+        self.assertEqual(ap.r0_hits('LICENSES/x.txt', BLOOD + '\n', set()), [])
+
+
+class AllowlistTests(unittest.TestCase):
+    def test_parse(self):
+        md = '# R0\n```allow\nsrc/a.c\tfoo bar\n```\nsrc/b.c\tignored\n'
+        self.assertEqual(ap.parse_allowlist(md), {('src/a.c', 'foo bar')})
+
+    def test_empty_block(self):
+        self.assertEqual(ap.parse_allowlist('```allow\n```\n'), set())
+
+
+class PatternTests(unittest.TestCase):
+    def test_source_patterns_match_plan(self):
+        self.assertTrue(ap.P.search(BAD_GPU))
+        self.assertTrue(ap.P.search(SL2))
+        self.assertTrue(ap.Q.search(BAD_UNDERSCORE))
+        self.assertFalse(ap.Q.search('SUBB_U32'))
+
+
+if __name__ == '__main__':
+    unittest.main()

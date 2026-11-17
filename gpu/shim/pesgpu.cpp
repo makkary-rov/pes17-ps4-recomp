@@ -338,7 +338,6 @@ extern "C" int pesgpu_init(const PesGpuConfig* config) {
 }
 
 namespace Libraries::Kernel { void StartKernelService(); }
-extern "C" void pesgpu_start_online(void) {}
 extern "C" void pesgpu_register_kernel(void) {
     Libraries::Kernel::StartKernelService();
     Core::Loader::SymbolsResolver resolver;

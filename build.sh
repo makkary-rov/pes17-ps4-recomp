@@ -88,7 +88,7 @@ if [[ -n $windows && -f out/pes17recomp.exe &&
                -newer out/pes17recomp.exe -print -quit) ]]; then
     echo "Up to date: $PWD/out/pes17recomp.exe"
 else
-"$CC" "${cstd[@]}" -O2 -g -Wall -Wextra -Werror "${threads[@]}" "${includes[@]}" -I. -Isrc src/main.c "${runtime[@]}" src/vulkan_smoke.c out/libatrac9.a -lm "${gpu[@]}" "${libraries[@]}" "${link[@]}" -o out/pes17recomp
+"$CC" "${cstd[@]}" -O2 -g -Wall -Wextra -Werror "${threads[@]}" "${includes[@]}" -I. -Isrc src/main.c "${runtime[@]}" out/libatrac9.a -lm "${gpu[@]}" "${libraries[@]}" "${link[@]}" -o out/pes17recomp
 echo "Built $PWD/out/pes17recomp"
 fi
 if [[ ${1:-} == --test ]]; then

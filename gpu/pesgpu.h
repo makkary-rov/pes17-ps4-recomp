@@ -17,8 +17,6 @@ typedef struct {
 } PesGpuConfig;
 /* Registers kernel event queues (needed with or without graphics). */
 void pesgpu_register_kernel(void);
-/* Start networking after game metadata, guest TLS and linked modules are ready. */
-void pesgpu_start_online(void);
 /* Creates window, Vulkan device, presenter and GPU command processor. */
 int pesgpu_init(const PesGpuConfig *config);
 /* Function for an imported NID ("NID#lib#mod"), or 0 when the GPU library does not provide it. */

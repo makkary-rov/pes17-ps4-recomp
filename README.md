@@ -1,6 +1,6 @@
 # PES 2017 PS4 recompilation (PC)
 
-This is a static recompilation and HLE runtime project. It is a work in progress.
+This project approaches the PS4 executable by static recompilation of the PS4 x86-64 code, run on a high-level emulation (HLE) runtime written in C, with a Vulkan renderer derived from shadPS4 for graphics.
 
 ## Disclaimer
 
@@ -8,7 +8,14 @@ No game files, keys or firmware are included or provided. You need your own lega
 
 ## Status
 
-M1 in progress, does not build yet.
+See [STATUS.md](STATUS.md) for the milestone table.
+
+## Documentation
+
+- [BUILDING.md](BUILDING.md): build instructions (MSYS2 CLANG64)
+- [ARCHITECTURE.md](ARCHITECTURE.md): loader, runtime and GPU layout
+- [LEGAL.md](LEGAL.md): what the repository contains and does not contain
+- [CONTRIBUTING.md](CONTRIBUTING.md): patch records and the publish check
 
 ## Licence
 

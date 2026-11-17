@@ -1,5 +1,7 @@
 # Credits
 
+This project is not affiliated with Konami or Sony.
+
 - The authors of the upstream performance-stability-v2 PC port project
 - The shadPS4 project
 - The yuzu project
