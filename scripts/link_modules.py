@@ -273,6 +273,8 @@ def linked_aliases(added, title, out):
         if (library, module) != (row['library'], row['module']):
             raise ValueError(f"import {name}: decoded {library}/{module}, suffix map row "
                              f"{row['suffix']} says {row['library']}/{row['module']}")
+        if name in row.get('except', ()):
+            continue
         lines.append(f"{name} {parts[0] + row['canonical']}\n")
     path = out / 'import-aliases.txt'
     existing = path.read_text(encoding='utf-8') if path.is_file() else ''

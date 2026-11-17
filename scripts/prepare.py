@@ -123,6 +123,8 @@ def build_import_aliases(names, identities, config):
         if (library, module) != (row['library'], row['module']):
             raise ValueError(f"import {name}: decoded {library}/{module}, suffix map row "
                              f"{row['suffix']} says {row['library']}/{row['module']}")
+        if name in row.get('except', ()):
+            continue  # resolves by its own name
         chosen[name] = parts[0] + row['canonical']
     present = set(names)
     explicit = {}

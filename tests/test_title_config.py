@@ -52,8 +52,8 @@ class RealConfigTests(unittest.TestCase):
                                           "imports": 828})
         self.assertEqual(data["gnm_region"], {"lo": 0x274B000, "hi": 0x276A000})
         # Rows from the run #1 measurement (scripts/suggest_suffix_map.py, see impl-report-t7.md).
-        self.assertEqual(len(data["import_suffix_map"]), 25)
-        self.assertEqual(len(data["import_aliases"]), 87)
+        self.assertEqual(len(data["import_suffix_map"]), 26)
+        self.assertEqual(len(data["import_aliases"]), 2)
 
 
 class ValidConfigTests(unittest.TestCase):

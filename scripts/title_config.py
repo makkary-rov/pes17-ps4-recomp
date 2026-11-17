@@ -22,7 +22,8 @@ TOP_KEYS = {"_license", "schema", "title_id", "save_title_id", "eboot_elf_md5", 
             "gnm_region", "import_suffix_map", "import_aliases"}
 EXPECT_KEYS = {"entry", "relocations_written", "imports"}
 REGION_KEYS = {"lo", "hi"}
-SUFFIX_ROW_KEYS = {"suffix", "library", "module", "canonical", "evidence"}
+SUFFIX_ROW_KEYS = {"suffix", "library", "module", "canonical", "evidence", "except"}
+SUFFIX_ROW_REQUIRED = SUFFIX_ROW_KEYS - {"except"}  # "except": imports of the suffix that keep their own name
 ALIAS_ROW_KEYS = {"import", "canonical", "reason", "evidence"}
 
 
@@ -98,8 +99,12 @@ def _check_suffix_rows(rows, errors):
     seen = set()
     for index, row in enumerate(rows):
         where = f"import_suffix_map[{index}]"
-        if not _check_object(where, row, SUFFIX_ROW_KEYS, SUFFIX_ROW_KEYS, errors):
+        if not _check_object(where, row, SUFFIX_ROW_KEYS, SUFFIX_ROW_REQUIRED, errors):
             continue
+        skipped = row.get("except", [])
+        if not (isinstance(skipped, list) and all(_is_text(n) and n.endswith(row["suffix"]) for n in skipped)
+                and len(set(skipped)) == len(skipped)):
+            errors.append(f"{where}.except: must be a list of distinct import names ending with the suffix")
         for key in ("suffix", "canonical"):
             if not (isinstance(row[key], str) and SUFFIX_RE.match(row[key])):
                 errors.append(f"{where}.{key}: bad suffix syntax {row[key]!r}")
