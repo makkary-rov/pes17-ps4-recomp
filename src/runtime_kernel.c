@@ -442,7 +442,49 @@ static ABI int32_t kernel_poll_event_flag(uint32_t id, uint64_t bitPattern, uint
     return ERR(16);
 }
 
+/* Kernel contracts native libc's startup and shutdown paths call (found by running libc.prx under the loader). */
+static ABI int32_t kernel_mlock(void *address, uint64_t length) { (void)address; (void)length; return 0; } /* memory is never paged out */
+static ABI int32_t posix_msync(void *address, uint64_t length, int32_t flags) { (void)address; (void)length; (void)flags; return 0; }
+static ABI int32_t kernel_is_neo_mode(void) { return 0; } /* base console */
+static ABI int32_t kernel_uuid_create(unsigned char *uuid) {
+    static uint32_t counter = 1;
+    if (!uuid) return (int32_t)0x80020016; /* SCE_KERNEL_ERROR_EINVAL */
+    memset(uuid, 0, 16);
+    uint32_t n = counter++;
+    memcpy(uuid, &n, sizeof(n));
+    uuid[6] = 0x40; /* version 4 layout */
+    uuid[8] = 0x80;
+    return 0;
+}
+/* The host clock runs in UTC: local time equals UTC, no zone offset, no daylight saving. */
+static ABI int32_t kernel_utc_to_local(int64_t utc, int64_t *local, void *zone, int32_t *dst_seconds) {
+    if (local) *local = utc;
+    if (zone) memset(zone, 0, 8);
+    if (dst_seconds) *dst_seconds = 0;
+    return 0;
+}
+static ABI int32_t kernel_local_to_utc(int64_t local, int32_t flags, int64_t *utc, void *zone, int32_t *dst_seconds) {
+    (void)flags;
+    if (utc) *utc = local;
+    if (zone) memset(zone, 0, 8);
+    if (dst_seconds) *dst_seconds = 0;
+    return 0;
+}
+/* Module lookups for stack unwinding: no module is registered with the runtime yet, so they report
+   SCE_KERNEL_ERROR_ESRCH. C++ exception unwinding through them needs real module data (later). */
+static ABI int32_t kernel_module_not_found(void) { return (int32_t)0x80020003; }
+static ABI int32_t libc_pthread_cxa_finalize(void *dso) { (void)dso; return 0; }
+static ABI int32_t libc_is_signal_return(void *context, void *pc) { (void)context; (void)pc; return 0; }
+static ABI int32_t libc_sigreturn(void *context) { (void)context; return -1; }
+
 static const RuntimeExport exports[]={
+    {"sceKernelMlock",kernel_mlock}, {"msync",posix_msync}, {"sceKernelIsNeoMode",kernel_is_neo_mode},
+    {"sceKernelUuidCreate",kernel_uuid_create},
+    {"sceKernelConvertUtcToLocaltime",kernel_utc_to_local}, {"sceKernelConvertLocaltimeToUtc",kernel_local_to_utc},
+    {"sceKernelGetModuleInfoForUnwind",kernel_module_not_found}, {"sceKernelGetModuleInfoFromAddr",kernel_module_not_found},
+    {"sceKernelInternalMemoryGetModuleSegmentInfo",kernel_module_not_found}, {"__elf_phdr_match_addr",kernel_module_not_found},
+    {"__pthread_cxa_finalize",libc_pthread_cxa_finalize}, {"_is_signal_return",libc_is_signal_return},
+    {"sigreturn",libc_sigreturn},
     {"sceKernelCreateEventFlag",kernel_create_event_flag},
     {"sceKernelDeleteEventFlag",kernel_delete_event_flag},
     {"sceKernelSetEventFlag",kernel_set_event_flag},

@@ -326,9 +326,34 @@ static void rw_timeouts(void) {
     assert(rw_unlock(&f.lock)==0);
     fixture_destroy(&f);
 }
+/* Kernel contracts native libc's startup calls: they resolve under the title's own scoped names. */
+static void test_libc_startup_kernel_contracts(void) {
+    typedef int32_t (ABI *Call2)(void *, uint64_t);
+    typedef int32_t (ABI *Uuid)(unsigned char *);
+    typedef int32_t (ABI *Utc)(int64_t, int64_t *, void *, int32_t *);
+    typedef int32_t (ABI *Heap)(void *);
+    Call2 mlock=GET(Call2,"3k6kx-zOOSQ#3#D");
+    assert(mlock && mlock((void *)0x1000,4096)==0);
+    assert(GET(Call2,"WslcK1FQcGI#3#D") && ((int32_t (ABI *)(void))GET(void *,"WslcK1FQcGI#3#D"))()==0);   /* not Neo mode */
+    Uuid uuid=GET(Uuid,"Xjoosiw+XPI#3#D");
+    unsigned char a[16],b[16];
+    assert(uuid && uuid(a)==0 && uuid(b)==0 && memcmp(a,b,16)!=0 && uuid(NULL)!=0);
+    Utc to_local=GET(Utc,"-o5uEDpN+oY#3#D");
+    int64_t local=0; int32_t dst=7; unsigned char zone[8]={1,1,1,1,1,1,1,1};
+    assert(to_local && to_local(1700000000,&local,zone,&dst)==0 && local==1700000000 && dst==0 && zone[0]==0);
+    /* sceLibcHeapGetTraceInfo hands libc two writable output slots */
+    Heap trace=GET(Heap,"NWtTN10cJzE#libSceLibcInternalExt");
+    unsigned char info[32]; memset(info,0xAA,sizeof(info));
+    assert(trace && trace(info)==0);
+    uint64_t *first,*second; memcpy(&first,info+0x10,8); memcpy(&second,info+0x18,8);
+    assert(first && second && first!=second);
+    *first=0; *second=1;
+    assert(trace(NULL)!=0);
+}
 int main(int argc,char **argv) {
     runtime_start(0); assert(runtime_resolve("bzQExy189ZI#q#q",0)==0);
     runtime_start(1);
+    test_libc_startup_kernel_contracts();
     assert(runtime_resolve("bzQExy189ZI#wrong#module",0)==0);
     assert(runtime_resolve("unknown",0)==0);
     assert(runtime_resolve("8zTFvBIAIN8#q#q",1)==0);
