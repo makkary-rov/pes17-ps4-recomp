@@ -296,6 +296,12 @@ try {
             Add-Step 'build' 'FAIL' ('build.sh exit ' + $rb.Exit + ', timed out ' + $rb.TimedOut + ': ' + (Last-Line ($rb.Stdout + $rb.Stderr))) $rb.Seconds $rb.Exit
         }
     }
+    # ./build.sh --test relinks out\pes17recomp.exe, so the build-test gate (C9) runs HERE, before the
+    # executable is hashed and used for the loader run: the recorded hash is then that of the final exe.
+    $PreGate = $null
+    if ($HasMsys) {
+        $PreGate = Run-Msys './build.sh --test' (Join-Path $V 'M2-gate-build-test.log') 3600000
+    }
     $ExeSha = ''
     $ExeExists = Test-Path -LiteralPath $Exe -PathType Leaf
     if ($ExeExists) { $ExeSha = Hash-File $Exe }
@@ -649,7 +655,11 @@ try {
         $auditWarn = -1
         $auditPass = $false
         foreach ($g in $gates) {
-            $rg = Run-Msys $g.cmd (Join-Path $V ('M2-gate-' + $g.name + '.log')) 3600000
+            if ($g.name -eq 'build-test' -and $null -ne $PreGate) {
+                $rg = $PreGate
+            } else {
+                $rg = Run-Msys $g.cmd (Join-Path $V ('M2-gate-' + $g.name + '.log')) 3600000
+            }
             $gateExit[$g.name] = $rg.Exit
             if ($rg.Exit -eq 0 -and -not $rg.TimedOut) {
                 Add-Step ('gate-' + $g.name) 'PASS' ($g.cmd + ' exit 0') $rg.Seconds 0
@@ -692,6 +702,8 @@ finally {
         if ($Summary.SKIP -gt 0) { $overall = 'INCOMPLETE' }
         if ($Summary.FAIL -gt 0) { $overall = 'FAIL' }
         $finished = Get-Date
+        $ExeShaFinal = ''
+        if (Test-Path -LiteralPath $Exe -PathType Leaf) { $ExeShaFinal = Hash-File $Exe }
         $Result = [ordered]@{
             schema = 'pes-verify-m2-1'
             overall = $overall
@@ -702,7 +714,7 @@ finally {
             game_dir = $GameDir
             title_config = [ordered]@{ path = $TitleConfig; sha256 = $CfgSha; title_id = $(if ($CfgOk) { $Cfg.title_id } else { $null }) }
             input = [ordered]@{ file = $InputName; md5 = $InputMd5; sha256 = $InputSha; param_sfo_sha256 = $SfoSha }
-            exe = [ordered]@{ built_this_run = $BuildOk; sha256 = $ExeSha }
+            exe = [ordered]@{ built_this_run = $BuildOk; sha256 = $ExeSha; sha256_final = $ExeShaFinal; unchanged_since_loader_run = ($ExeSha -eq $ExeShaFinal) }
             boot_bin_sha256 = $BootSha1
             cpu = $CpuName
             os = $OsName
