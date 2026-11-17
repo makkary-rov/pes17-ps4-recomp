@@ -209,6 +209,9 @@ uintptr_t runtime_resolve(const char *name, int is_data) {
         static int32_t need_libc_internal = 1; /* SDK marker variable referenced by Fios2 */
         if (!strcmp(name, "f7uOxY9mM1U#p#J")) return (uintptr_t)&stack_canary;
         if (!strcmp(name, "ZT4ODD2Ts9o#libSceLibcInternal")) return (uintptr_t)&need_libc_internal;
+        /* __progname (libkernel data): libc clears it during startup and sets it from argv[0]. */
+        static char *progname_variable = NULL;
+        if (!strcmp(name, "djxxOmW6-aw#3#D")) return (uintptr_t)&progname_variable;
         return 0;
     }
     /* Exact scoped imports of the upstream title (G-50 moves them to the title config); the suffix identifies library/module. */
