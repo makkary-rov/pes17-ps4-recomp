@@ -19,7 +19,7 @@ and validates a file. `validate(data)` checks a parsed dict. Both raise
 | `_license` | string | Must be `"GPL-2.0-or-later"`. JSON has no comments, so this key carries the licence line. |
 | `schema` | string | Must be `"pes-title-1"`. |
 | `title_id` | string | Title id, `CUSA` plus five digits (`CUSA04957`). |
-| `save_title_id` | string | Title id used for the save root. Same format. |
+| `save_title_id` | string | Title id used for the save root (`<user dir>/savedata/1/<save_title_id>`, where the user dir is set as in BUILDING.md section 5). Same format. |
 | `eboot_elf_md5` | string | MD5 of the input `eboot.elf`, 32 lowercase hex characters. |
 | `expect` | object | `entry` (`0x` hex address), `relocations_written` (integer), `imports` (integer). No other keys. |
 | `gnm_region` | object or null | `{"lo": int, "hi": int}` (JSON decimal integers, not hex strings) with `0 <= lo < hi`, guest addresses. `null` until the region is measured. |

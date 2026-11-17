@@ -91,12 +91,14 @@ records an `arguments` FAIL step, uses the default `out` for the result, and sti
   Ghidra: pick one row, find its guest address in the existing Ghidra project (Ghidra address minus
   0x1000000) and compare the instruction bytes and mnemonic. Record the result in the run notes.
 - C7b NA: the Windows build has no GNM binding census (it moves to M4).
-- C8 EXPLAIN: the title id is CUSA04957 and matches the content profile. The save root is computed
-  by the loader and is not printed, so the script does not measure it. The user confirms it by hand
-  on the PC: after the game has created its save data, check that the save root folder path ends
-  with `savedata\<user id>\CUSA04957` (the `<user id>` folder is the only one under `savedata`).
-  Record the full path in the run notes. FAIL when the ids differ or `param.sfo`
-  `INSTALL_DIR_SAVEDATA` names another directory.
+- C8: the title id is CUSA04957 and matches the content profile. The loader run passes `--app0` with
+  the game directory, and the loader log then holds `User directory: <path>` (startup) and
+  `Save root: <user>/savedata/1/CUSA04957`. C8 PASS when the save root is `<user>\savedata\1\CUSA04957`
+  for the reported user directory, lies under the repo `user` directory and not under the game
+  directory. EXPLAIN when the loader did not run, the log has no such lines, or the user directory is
+  not the repo `user` directory (for example `PES_USER_DIR` or `--user` set). FAIL when the ids differ,
+  `param.sfo` `INSTALL_DIR_SAVEDATA` names another directory, or the save root is inside the game
+  directory.
 - C9 PASS: `build.sh --test`, `py_compile`, `unittest` and `audit_publish` (0 WARN) all exit 0.
   SKIP when MSYS2 is not installed.
 

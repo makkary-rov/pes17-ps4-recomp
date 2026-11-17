@@ -814,6 +814,113 @@ int main(int argc, char **argv) {
 #define main loader_main
 #endif
 
+/* User directory: --user, then PES_USER_DIR, then <repo>/user when the loader is in <repo>/out,
+   else <loader directory>/user. The working directory is never used. */
+static int is_separator(char c) { return c=='/' || c=='\\'; }
+static int same_text(const char *a, const char *b, size_t n) { /* ASCII; case-insensitive on Windows */
+    for (size_t i=0;i<n;++i) {
+        int x=(unsigned char)a[i], y=(unsigned char)b[i];
+#ifdef _WIN32
+        if (x>='A' && x<='Z') x+=32;
+        if (y>='A' && y<='Z') y+=32;
+#endif
+        if (x!=y) return 0;
+    }
+    return 1;
+}
+static int loader_path(char *out, size_t size) {
+#ifdef _WIN32
+    DWORD n = GetModuleFileNameA(NULL, out, (DWORD)size);
+    return n && n < size ? 0 : -1;
+#else
+    ssize_t n = readlink("/proc/self/exe", out, size - 1);
+    if (n <= 0 || (size_t)n >= size - 1) return -1;
+    out[n] = 0;
+    return 0;
+#endif
+}
+static int default_user_dir(char *out, size_t size) {
+    char exe[1024];
+    if (loader_path(exe, sizeof(exe))) return -1;
+    char *last = NULL;
+    for (char *p = exe; *p; ++p) if (is_separator(*p)) last = p;
+    if (!last) return -1;
+    *last = 0; /* exe is now the loader directory */
+    char *name = exe;
+    for (char *p = exe; *p; ++p) if (is_separator(*p)) name = p + 1;
+    size_t keep = strlen(exe);
+    if (strlen(name) == 3 && same_text(name, "out", 3)) keep = name > exe ? (size_t)(name - exe) - 1 : 0;
+    int n = snprintf(out, size, "%.*s/user", (int)keep, exe);
+    if (n < 0 || (size_t)n >= size) return -1;
+    for (char *p = out; *p; ++p) if (*p == '\\') *p = '/';
+    return 0;
+}
+/* Absolute form with '/' separators, "." and ".." resolved, no trailing slash. */
+static int absolute_path(const char *in, char *out, size_t size) {
+    char raw[2048], cwd[1024];
+    if (!*in) return -1;
+    int absolute = is_separator(in[0]) || (in[1] == ':');
+    if (absolute) snprintf(raw, sizeof(raw), "%s", in);
+    else {
+#ifdef _WIN32
+        DWORD n = GetCurrentDirectoryA((DWORD)sizeof(cwd), cwd);
+        if (!n || n >= sizeof(cwd)) return -1;
+#else
+        if (!getcwd(cwd, sizeof(cwd))) return -1;
+#endif
+        snprintf(raw, sizeof(raw), "%s/%s", cwd, in);
+    }
+    for (char *p = raw; *p; ++p) if (*p == '\\') *p = '/';
+    size_t len = 0, floor = 0;
+    const char *p = raw;
+    if (p[1] == ':') { out[0] = p[0]; out[1] = ':'; len = floor = 2; p += 2; }
+    out[len] = 0;
+    while (*p) {
+        while (*p == '/') ++p;
+        const char *seg = p;
+        while (*p && *p != '/') ++p;
+        size_t n = (size_t)(p - seg);
+        if (n == 0 || (n == 1 && seg[0] == '.')) continue;
+        if (n == 2 && seg[0] == '.' && seg[1] == '.') {
+            if (len > floor) {
+                char *slash = strrchr(out, '/');
+                len = slash ? (size_t)(slash - out) : 0;
+                if (len < floor) len = floor;
+            }
+            out[len] = 0;
+            continue;
+        }
+        if (len + 1 + n + 1 > size) return -1;
+        out[len++] = '/';
+        memcpy(out + len, seg, n);
+        len += n;
+        out[len] = 0;
+    }
+    if (len == 0) { if (size < 2) return -1; out[0] = '/'; out[1] = 0; }
+    return 0;
+}
+/* 1 when dir is base or below it; both absolute and normalized. */
+static int path_inside(const char *dir, const char *base) {
+    size_t n = strlen(base);
+    if (!n || strlen(dir) < n || !same_text(dir, base, n)) return 0;
+    return dir[n] == 0 || dir[n] == '/';
+}
+/* 1 when the user directory is the game directory (app0) or lies inside it or inside its CUSA-style
+   parent; 0 otherwise; -1 when the paths cannot be resolved. */
+static int user_in_game_dir(const char *user, const char *app0) {
+    char game[2048], user_abs[2048], parent[2048];
+    if (absolute_path(app0, game, sizeof(game)) || absolute_path(user, user_abs, sizeof(user_abs))) return -1;
+    if (path_inside(user_abs, game)) return 1;
+    snprintf(parent, sizeof(parent), "%s", game);
+    char *slash = strrchr(parent, '/');
+    if (!slash || slash == parent) return 0;
+    *slash = 0;
+    const char *name = strrchr(parent, '/');
+    name = name ? name + 1 : parent;
+    if (strlen(name) >= 4 && same_text(name, "CUSA", 4) && path_inside(user_abs, parent)) return 1;
+    return 0;
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
 #ifndef _WIN32
@@ -846,6 +953,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s boot.bin [--cpu-only] [--strict-imports] [--content-profile file] [--app0 dir] [--user dir] [--patches file] [--import-aliases file] [--import-report file] [--dump-image file] [--stop-before-entry] [--timeout seconds]\n", argv[0]);
         return 1;
     }
+    char default_user[1024];
+    const char *env_user = getenv("PES_USER_DIR");
+    if (!user_dir && env_user && *env_user) user_dir = env_user;
+    if (!user_dir) {
+        if (default_user_dir(default_user, sizeof(default_user))) fail("cannot locate the loader directory; use --user or PES_USER_DIR");
+        user_dir = default_user;
+    }
+    printf("User directory: %s\n", user_dir);
     if (content_profile) {
         FILE *profile=fopen(content_profile,"rb");
         unsigned char data[28];
@@ -860,7 +975,13 @@ int main(int argc, char **argv) {
         runtime_content_configure(values);
     }
     if (app0) {
-        runtime_file_configure(app0, user_dir ? user_dir : "user");
+        int inside = user_in_game_dir(user_dir, app0);
+        if (inside < 0) fail("cannot resolve the user or game directory");
+        if (inside) {
+            fprintf(stderr, "ERROR: user directory %s is inside the game directory %s; choose another with --user or PES_USER_DIR\n", user_dir, app0);
+            return 1;
+        }
+        runtime_file_configure(app0, user_dir);
         char sfo[4096], id[16]="";
         snprintf(sfo,sizeof(sfo),"%s/sce_sys/param.sfo",app0);
         if (sfo_value(sfo,"INSTALL_DIR_SAVEDATA",id,sizeof(id),NULL) || sfo_value(sfo,"TITLE_ID",id,sizeof(id),NULL))
@@ -999,7 +1120,7 @@ int main(int argc, char **argv) {
         sfo_value(sfo,"ATTRIBUTE",NULL,0,&attributes);
         uint64_t sdk=0;
         if (procparam) memcpy(&sdk,image+procparam+16,8); /* procparam: size, magic, count, sdk_version */
-        PesGpuConfig gpu={title,serial,user_dir ? user_dir : "user",(uint32_t)sdk,attributes,1920,1080};
+        PesGpuConfig gpu={title,serial,user_dir,(uint32_t)sdk,attributes,1920,1080};
         gpu_enabled=1; /* page tracking starts while the rasterizer registers guest memory */
         if (pesgpu_init(&gpu)) fail("GPU initialization failed");
         printf("GPU: window and Vulkan presenter ready; SDK 0x%08x, %u HLE symbols\n",(unsigned)sdk,pesgpu_symbol_count());

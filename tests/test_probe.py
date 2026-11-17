@@ -39,6 +39,18 @@ def native_package(name='fixture-native', binding_address=4112, binding_kind=1,
             + struct.pack('<8Q',32,1,0,0,40,1,1,0) + image)
 
 
+def sfo_bytes(entries):
+    # PS4 param.sfo with string (0x0204) values: header, index table, key table, value table.
+    keys, values, index = b'', b'', b''
+    for key, value in entries.items():
+        data = value.encode() + b'\0'
+        index += struct.pack('<HHIII', len(keys), 0x0204, len(data), len(data), len(values))
+        keys += key.encode() + b'\0'
+        values += data
+    keys_offset = 20 + len(index)
+    return struct.pack('<4sIIII', b'\0PSF', 0x101, keys_offset, keys_offset + len(keys), len(entries)) + index + keys + values
+
+
 REPORT_IMAGE_SIZE = 12288
 
 def report_package(code):
@@ -356,6 +368,94 @@ class LoaderTests(unittest.TestCase):
                     rows = report.read_bytes()
                     expected_rows = expected_rows or rows
                     self.assertEqual(rows, expected_rows)
+
+    def run_user_dir(self, *options, cwd=None, env=None, exe=None):
+        # Stop-before-entry run; PES_USER_DIR is removed from the environment unless env sets it.
+        with tempfile.TemporaryDirectory() as tmp:
+            boot = Path(tmp) / 'boot.bin'
+            boot.write_bytes(package(b'\x0f\x0b'))
+            environ = {k: v for k, v in os.environ.items() if k != 'PES_USER_DIR'}
+            environ.update(env or {})
+            return subprocess.run([str(exe or EXE.resolve()), str(boot), '--cpu-only', '--stop-before-entry', *options],
+                                  stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10,
+                                  cwd=cwd, env=environ)
+
+    @staticmethod
+    def logged(r, prefix):
+        lines = [line[len(prefix):] for line in r.stdout.splitlines() if line.startswith(prefix)]
+        return lines[0] if len(lines) == 1 else None
+
+    @staticmethod
+    def same_path(a, b):
+        return os.path.normcase(os.path.abspath(str(a))) == os.path.normcase(os.path.abspath(str(b)))
+
+    def test_default_user_dir_is_repo_user_whatever_the_working_directory(self):
+        with tempfile.TemporaryDirectory() as cwd:
+            r = self.run_user_dir(cwd=cwd)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        line = self.logged(r, 'User directory: ')
+        self.assertIsNotNone(line, r.stdout)
+        self.assertTrue(self.same_path(line, ROOT / 'user'), line)
+
+    def test_loader_outside_out_uses_a_user_folder_beside_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / 'bin' / EXE.name
+            copy.parent.mkdir()
+            copy.write_bytes(EXE.read_bytes())
+            r = self.run_user_dir(exe=copy.resolve())
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        line = self.logged(r, 'User directory: ')
+        self.assertTrue(self.same_path(line, Path(tmp) / 'bin' / 'user'), line)
+
+    def test_user_option_overrides_environment_and_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            user = Path(tmp) / 'chosen'
+            r = self.run_user_dir('--user', str(user), env={'PES_USER_DIR': str(Path(tmp) / 'env')})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.logged(r, 'User directory: '), str(user))
+
+    def test_pes_user_dir_overrides_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            user = Path(tmp) / 'from-env'
+            r = self.run_user_dir(env={'PES_USER_DIR': str(user)})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.logged(r, 'User directory: '), str(user))
+
+    def test_user_dir_inside_app0_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app0 = Path(tmp) / 'app0'
+            (app0 / 'sce_sys').mkdir(parents=True)
+            r = self.run_user_dir('--app0', str(app0), '--user', str(app0 / 'user'))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn('inside the game directory', r.stderr)
+            self.assertFalse((app0 / 'user').exists())
+
+    def test_user_dir_inside_cusa_parent_of_app0_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            game = Path(tmp) / 'CUSA99999'
+            (game / 'app0').mkdir(parents=True)
+            r = self.run_user_dir('--app0', str(game / 'app0'), '--user', str(game / 'user'))
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn('inside the game directory', r.stderr)
+            self.assertFalse((game / 'user').exists())
+
+    def test_user_dir_beside_a_non_cusa_parent_of_app0_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app0 = Path(tmp) / 'games' / 'app0'
+            app0.mkdir(parents=True)
+            r = self.run_user_dir('--app0', str(app0), '--user', str(Path(tmp) / 'games' / 'user'))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_save_root_is_logged_under_the_user_directory_before_stop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app0 = Path(tmp) / 'game'
+            (app0 / 'sce_sys').mkdir(parents=True)
+            (app0 / 'sce_sys' / 'param.sfo').write_bytes(sfo_bytes({'TITLE_ID': 'CUSA04957'}))
+            user = Path(tmp) / 'user'
+            r = self.run_user_dir('--app0', str(app0), '--user', str(user))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f'Save root: {user}/savedata/1/CUSA04957', r.stdout.splitlines())
+        self.assertEqual(r.stdout.splitlines()[-1], 'Entering original x86-64 code at guest offset 0x0')
 
 
 class ProbeGateTests(unittest.TestCase):

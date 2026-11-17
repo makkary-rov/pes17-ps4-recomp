@@ -44,6 +44,10 @@ function Resolve-Arg([string]$Base, [string]$Value, [string]$Label, [string]$Fal
     try { return [IO.Path]::GetFullPath([IO.Path]::Combine($Base, $Value)) }
     catch { [void]$ArgErrors.Add($Label + ' has illegal path characters: ' + $Value); return $Fallback }
 }
+# Absolute, lower-case, no trailing separator, for comparing paths printed by the loader; '' when it cannot be resolved.
+function Norm-Path([string]$P) {
+    try { return ([IO.Path]::GetFullPath($P)).TrimEnd('\').ToLowerInvariant() } catch { return '' }
+}
 $GameDir = Resolve-Arg (Get-Location).Path $Game '-Game' $Game
 $TitlePath = Resolve-Arg $Root $TitleConfig '-TitleConfig' $TitleConfig
 $OutRoot = Resolve-Arg $Root $Out '-Out' (Join-Path $Root 'out')
@@ -370,7 +374,7 @@ try {
         Add-Step 'loader' 'FAIL' ('not run: ' + $LoaderReason)
     } else {
         $LoaderR = Run-Native -Exe $Exe -ArgList @(
-            (Join-Path $Run1 'boot.bin'), '--cpu-only', '--stop-before-entry',
+            (Join-Path $Run1 'boot.bin'), '--cpu-only', '--stop-before-entry', '--app0', $GameDir,
             '--import-aliases', (Join-Path $Run1 'import-aliases.txt'),
             '--import-report', $TsvPath, '--dump-image', $DumpPath,
             '--content-profile', (Join-Path $Run1 'content.bin')) -LogFile $LoaderLog -TimeoutMs 900000 -EnvVars $LoaderEnv
@@ -581,16 +585,23 @@ try {
     }
     Set-Crit 'C7b' 'NA' 'N/A on the Windows build: gpu/CMakeLists.txt excludes pes_gnm_hooks.cpp under WIN32, so there is no GNM binding census here (moves to M4, U-5). PES_GNM_CENSUS is not used.' ([ordered]@{})
 
-    # C8: ids. The loader does not print the save root, so it is recorded as not measured (EXPLAIN).
+    # C8: ids, then the save root the loader logs. The loader prints "User directory: <path>" at startup and
+    # "Save root: <user>/savedata/1/<title>" when savedata is configured (--app0 given; src/main.c, src/runtime_savedata.c).
     if (-not $ContentOk -or -not $CfgOk) {
         Set-Crit 'C8' 'FAIL' 'not measured: content profile or title config unusable' ([ordered]@{})
     } else {
         $cp = (Read-Utf8 (Join-Path $Run1 'content-profile.json')) | ConvertFrom-Json
         $sfoSave = $null
         if ($An -and $An.sfo -and ($An.sfo.PSObject.Properties.Name -contains 'INSTALL_DIR_SAVEDATA')) { $sfoSave = $An.sfo.INSTALL_DIR_SAVEDATA }
+        $udMatch = [regex]::Match($Combined, '(?m)^User directory: (.+?)\r?$')
+        $srMatch = [regex]::Match($Combined, '(?m)^Save root: (.+?)\r?$')
+        $udLine = $(if ($udMatch.Success) { $udMatch.Groups[1].Value } else { $null })
+        $srLine = $(if ($srMatch.Success) { $srMatch.Groups[1].Value } else { $null })
+        $RepoUser = Join-Path $Root 'user'
         $c8Values = [ordered]@{
             content_title_id = $cp.title_id; config_title_id = $Cfg.title_id; config_save_title_id = $Cfg.save_title_id
-            param_sfo_INSTALL_DIR_SAVEDATA = $sfoSave; save_root_reported = $false
+            param_sfo_INSTALL_DIR_SAVEDATA = $sfoSave; user_directory_reported = $udLine; save_root_reported = $srLine
+            repo_user_directory = $RepoUser; game_directory = $GameDir
         }
         if ($cp.title_id -ne $Cfg.save_title_id -or $Cfg.title_id -ne $Cfg.save_title_id) {
             Set-Crit 'C8' 'FAIL' 'content profile title_id, config title_id and save_title_id do not agree' $c8Values
@@ -598,8 +609,29 @@ try {
             Set-Crit 'C8' 'FAIL' 'title id is not CUSA04957' $c8Values
         } elseif ($sfoSave -and $sfoSave -ne $Cfg.save_title_id) {
             Set-Crit 'C8' 'FAIL' 'param.sfo INSTALL_DIR_SAVEDATA differs from the title id; the loader uses it for the save directory (src/main.c, savedata configure)' $c8Values
+        } elseif (-not $LoaderRan) {
+            Set-Crit 'C8' 'EXPLAIN' 'ids match CUSA04957; the loader did not run, so the save root is not measured' $c8Values
+        } elseif (-not $udLine -or -not $srLine) {
+            Set-Crit 'C8' 'EXPLAIN' 'ids match CUSA04957; the loader log has no "User directory:" or "Save root:" line, so the save root is not measured (the loader prints Save root only with --app0 and a title id)' $c8Values
         } else {
-            Set-Crit 'C8' 'EXPLAIN' 'ids match CUSA04957. The save root (<user>/savedata/<user id>/CUSA04957) is computed by the loader and not printed, so it is not measured; confirm the path on the PC' $c8Values
+            $udN = Norm-Path $udLine
+            $srN = Norm-Path $srLine
+            $repoN = Norm-Path $RepoUser
+            $gameN = Norm-Path $GameDir
+            $expectN = Norm-Path ($udLine.TrimEnd('/', '\') + '\savedata\1\CUSA04957')
+            $c8Values['user_directory_normalized'] = $udN
+            $c8Values['save_root_normalized'] = $srN
+            if (-not $srN -or -not $repoN -or -not $gameN -or -not $udN -or -not $expectN) {
+                Set-Crit 'C8' 'EXPLAIN' 'a path from the loader log could not be normalized; the save root is not measured' $c8Values
+            } elseif ($srN -eq $gameN -or $srN.StartsWith($gameN + '\')) {
+                Set-Crit 'C8' 'FAIL' ('save root ' + $srLine + ' is inside the game directory ' + $GameDir + '; saves must go to the repo user directory') $c8Values
+            } elseif ($srN -ne $expectN) {
+                Set-Crit 'C8' 'FAIL' ('save root ' + $srLine + ' is not <user>\savedata\1\CUSA04957 for the reported user directory ' + $udLine) $c8Values
+            } elseif ($srN.StartsWith($repoN + '\')) {
+                Set-Crit 'C8' 'PASS' ('ids match CUSA04957; the loader save root ' + $srLine + ' is under the repo user directory and not under the game directory') $c8Values
+            } else {
+                Set-Crit 'C8' 'EXPLAIN' ('ids match CUSA04957; the loader user directory ' + $udLine + ' is not the repo user directory ' + $RepoUser + ' (PES_USER_DIR or --user set?), so the save root is not checked against the repo') $c8Values
+            }
         }
     }
 

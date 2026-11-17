@@ -69,3 +69,15 @@ python3 scripts/audit_publish.py
 ```
 
 Diagnostics stay off unless you set a `PES_*` environment variable.
+
+## 5. User directory (save data, trophies)
+
+The loader writes saves and trophies to the user directory. Its value is chosen in this order:
+
+1. `--user <dir>` on the command line.
+2. The `PES_USER_DIR` environment variable.
+3. The default: `<repo>/user` when the loader is in `<repo>/out` (the build output), otherwise `user` beside the loader.
+
+The default does not depend on the working directory. The loader prints `User directory: <path>` at startup.
+Save data goes to `<user dir>/savedata/1/<title id>`. The loader refuses (exit 1) a user directory that is the
+game directory given with `--app0`, or lies inside it or inside its `CUSA` parent: saves never go into the game.

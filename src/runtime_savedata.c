@@ -72,6 +72,8 @@ static size_t mounts_done, memory_writes;
 
 void runtime_savedata_configure(const char *title) {
     if (title && *title) snprintf(title_id,sizeof(title_id),"%s",title);
+    /* Same layout as root(); 1 is the initial user (USER_ID in runtime_services.c). */
+    printf("Save root: %s/savedata/1/%s\n",runtime_file_user_dir(),title_id);
 }
 
 static int make_dirs(const char *path) {
