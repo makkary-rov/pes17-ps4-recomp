@@ -57,6 +57,9 @@ try {
         $psi.FileName = $Exe
         $argText = '"' + $Image + '" --app0 "' + $GameDir + '"'
         if (Test-Path -LiteralPath $Aliases) { $argText += ' --import-aliases "' + $Aliases + '"' }
+        # The AppContent profile (SKU and add-ons) that verify_M2.ps1 generates from the game's param.sfo.
+        $Content = Join-Path $V 'run1\content.bin'
+        if (Test-Path -LiteralPath $Content) { $argText += ' --content-profile "' + $Content + '"' }
         $psi.Arguments = $argText
         $psi.UseShellExecute = $false
         $psi.RedirectStandardOutput = $true
