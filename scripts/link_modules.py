@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Link the eboot with the game's bundled system modules into one probe image.
 
-Successor of link_libc.py for several modules (default: libc.prx, then
-libSceFios2.prx). Every module is placed after the previous one; imports of
+Successor of link_libc.py for several modules (default: libc.prx, libSceFios2.prx,
+then libSceNpToolkit.prx). Every module is placed after the previous one; imports of
 all modules share one import table, so the C runtime can override any
 function (host contracts first) and otherwise binds the native export.
 
@@ -19,7 +19,9 @@ import struct
 from prepare import parse_elf, parse_self, segment_flags, span, unpack
 from link_libc import encode_id
 
-DEFAULT_MODULES = ('libc.prx', 'libSceFios2.prx')
+# The game's bundled modules that run natively: libc and Fios2 (M2b D-LIBC variant A) and the NP
+# toolkit (ledger row G-6: its C++ API is linked rather than stubbed function by function).
+DEFAULT_MODULES = ('libc.prx', 'libSceFios2.prx', 'libSceNpToolkit.prx')
 FS_LOAD = bytes.fromhex('64488b042500000000')  # mov rax, fs:[0]
 
 

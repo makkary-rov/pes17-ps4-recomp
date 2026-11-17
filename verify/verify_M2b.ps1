@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 <#
 .SYNOPSIS
-    M2b (D-LIBC) variant A measurement: link the dump's own libc.prx and libSceFios2.prx natively.
+    M2b (D-LIBC) variant A measurement: link the dump's own libc.prx, libSceFios2.prx and libSceNpToolkit.prx natively.
 .DESCRIPTION
     Needs the output of verify_M2.ps1 (out\verify\run1\boot.bin and analysis.json). Runs
     scripts\link_modules.py into a copy of that folder (out\verify\m2b), then the loader on the linked image
     with --stop-before-entry and an import report. Writes out\verify\M2b-result.json (hashes, counts and
     import names only; no game bytes). The game directory is only read.
 .PARAMETER Game
-    The game directory (eboot.elf or eboot.bin, sce_module\libc.prx, sce_module\libSceFios2.prx).
+    The game directory (eboot.elf or eboot.bin, sce_module\libc.prx, sce_module\libSceFios2.prx, sce_module\libSceNpToolkit.prx).
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File verify\verify_M2b.ps1 -Game <path to your game folder>
 #>
@@ -115,7 +115,7 @@ try {
         try { $ident = (Get-Content -LiteralPath (Join-Path $W 'analysis.json') -Raw | ConvertFrom-Json).import_identities } catch { }
         $libOf = @{}
         if ($ident) { foreach ($pr in $ident.PSObject.Properties) { $libOf[$pr.Name] = [string]$pr.Value[1] } }
-        $want = @($rows | Where-Object { $libOf.ContainsKey($_.name) -and ($libOf[$_.name] -in @('libc', 'libSceFios2', 'libSceLibcInternal')) })
+        $want = @($rows | Where-Object { $libOf.ContainsKey($_.name) -and ($libOf[$_.name] -in @('libc', 'libSceFios2', 'libSceLibcInternal', 'libSceNpToolkit')) })
         $bad = @($want | Where-Object { $_.result -eq 'trap' })
         if ($want.Count -eq 0) {
             Set-Crit 'B2' 'EXPLAIN' 'no libc/Fios2 rows found in the report (report or analysis missing)' ([ordered]@{ rows = $rows.Count })
