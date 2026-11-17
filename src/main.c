@@ -95,6 +95,17 @@ static void load_import_aliases(const char *path, uint64_t max_count) {
     }
     fclose(f);
 }
+static const char *import_alias(const char *name);
+/* The name an import resolves under: its alias (canonical) name first; when that names nothing the runtime
+   provides (an import with no upstream equivalent), its own exact name. Never a prefix or hash-only match. */
+static uintptr_t resolve_import(const char *name, int is_data, const char **looked_up) {
+    const char *alias = import_alias(name);
+    uintptr_t address = alias ? runtime_resolve(alias, is_data) : 0;
+    if (address) { *looked_up = alias; return address; }
+    address = runtime_resolve(name, is_data);
+    *looked_up = address || !alias ? name : alias;
+    return address;
+}
 static const char *import_alias(const char *name) {
     for (uint64_t i = 0; i < alias_count; ++i)
         if (!strcmp(alias_import[i], name)) return alias_canonical[i];
@@ -736,10 +747,9 @@ static void write_import_report(const char *path, const Reloc *relocs, uint64_t 
     uint64_t host = 0, native = 0, trap = 0, prefix_only = 0;
     for (uint64_t i = 0; i < import_count; ++i) {
         int is_data = kinds[i] == 2;
-        const char *looked = import_alias(names[i]);
-        if (!looked) looked = names[i];
+        const char *looked;
         const char *result, *candidate = "-";
-        if (runtime_resolve(looked, is_data)) {
+        if (resolve_import(names[i], is_data, &looked)) {
             result = "host";
             ++host;
         } else if (native_libc && bindings[i] && binding_kinds[i] == (is_data ? 2 : 1)) {
@@ -1160,8 +1170,8 @@ int main(int argc, char **argv) {
                         : relocs[i].kind == 1 ? (uintptr_t)(traps + 32 * relocs[i].value)
                         : (uintptr_t)image + relocs[i].value;
         if (relocs[i].kind) {
-            const char *lookup = import_alias(names[relocs[i].value]);
-            uintptr_t resolved = runtime_resolve(lookup ? lookup : names[relocs[i].value], relocs[i].kind == 2);
+            const char *lookup;
+            uintptr_t resolved = resolve_import(names[relocs[i].value], relocs[i].kind == 2, &lookup);
             if (resolved) value = resolved + relocs[i].addend;
             else if (native_libc && bindings[relocs[i].value]) {
                 uint64_t address=bindings[relocs[i].value];

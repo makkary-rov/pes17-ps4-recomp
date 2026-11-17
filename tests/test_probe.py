@@ -356,6 +356,30 @@ class LoaderTests(unittest.TestCase):
             rows = report.read_bytes().decode('ascii').splitlines()
         self.assertTrue(rows[1].startswith('0\tdjxxOmW6-aw#p#J\tdata\tdjxxOmW6-aw#p#J\thost\t'), rows[1])
 
+    def test_aliased_import_falls_back_to_its_own_exact_name(self):
+        # scePlayGoSetToDoList has a row under the title's own scoped name but none under the canonical name the
+        # suffix map would give it: the import resolves under its own name, not by prefix.
+        data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['gUPGiOQ1tmQ#M#N'], capabilities=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            aliases = Path(tmp) / 'import-aliases.txt'
+            aliases.write_bytes(b'gUPGiOQ1tmQ#M#N gUPGiOQ1tmQ#n#o\n')
+            r = self.run_image(data, '--stop-before-entry', '--import-aliases', str(aliases),
+                               '--import-report', str(report))
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertEqual(rows[1], '0\tgUPGiOQ1tmQ#M#N\tfunc\tgUPGiOQ1tmQ#M#N\thost\tscePlayGoSetToDoList\t-')
+        # a name that exists nowhere stays a trap even with an alias
+        data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['zzzzzzzzzzz#3#D'], capabilities=1)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / 'imports.tsv'
+            aliases = Path(tmp) / 'import-aliases.txt'
+            aliases.write_bytes(b'zzzzzzzzzzz#3#D zzzzzzzzzzz#p#J\n')
+            r = self.run_image(data, '--stop-before-entry', '--import-aliases', str(aliases),
+                               '--import-report', str(report))
+            rows = report.read_bytes().decode('ascii').splitlines()
+        self.assertTrue(rows[1].split('\t')[4] == 'trap', rows[1])
+
     def test_import_report_looked_up_name_is_the_alias_canonical_name(self):
         data = package(b'\x0f\x0b', [(16, 1, 0, 0)], ['fixture-import'], capabilities=1)
         with tempfile.TemporaryDirectory() as tmp:
