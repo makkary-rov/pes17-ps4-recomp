@@ -114,6 +114,11 @@ if [[ ${1:-} == --test ]]; then
     (cd out && ./display-modes-test)
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings_keys.cpp gpu/shim/pes_settings.cpp -o out/settings-keys-test
     (cd out && ./settings-keys-test)
+    if [[ -n $windows ]]; then
+        # The settings window shell (launcher/): Windows only, with its visual-style manifest.
+        windres --input launcher/pes17settings.rc --output out/pes17settings.res.o -O coff
+        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32
+    fi
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)
     if [[ -n $windows ]]; then
