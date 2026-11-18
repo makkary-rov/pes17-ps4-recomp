@@ -143,7 +143,7 @@ void Runtime::CopyBuffer(const VideoCore::Buffer* src, const VideoCore::Buffer* 
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "CopyBuffer (vk_runtime.cpp:146)"}, [src_handle = src->Handle(), dst_handle = dst->Handle(),
+    scheduler.RecordCrumb({.name = "runtime CopyBuffer"}, [src_handle = src->Handle(), dst_handle = dst->Handle(),
                       regions = scheduler.RecordData(copies)](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyBuffer(src_handle, dst_handle, regions.size(), regions.data());
     });
@@ -170,7 +170,7 @@ void Runtime::FillBuffer(const VideoCore::Buffer* dst, u64 offset, u64 size, u32
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "FillBuffer (vk_runtime.cpp:173)"}, [handle = dst->Handle(), offset, size, value](vk::CommandBuffer cmdbuf) {
+    scheduler.RecordCrumb({.name = "runtime FillBuffer"}, [handle = dst->Handle(), offset, size, value](vk::CommandBuffer cmdbuf) {
         cmdbuf.fillBuffer(handle, offset, size, value);
     });
 
@@ -191,7 +191,7 @@ void Runtime::CopyFromGuestChunk(vk::Buffer src, const VideoCore::Buffer* dst,
     if (needs_flush) {
         FlushBarriers();
     }
-    scheduler.RecordCrumb({.name = "CopyFromGuestChunk (vk_runtime.cpp:194)"}, [src, dst_handle = dst->Handle(),
+    scheduler.RecordCrumb({.name = "runtime CopyFromGuestChunk"}, [src, dst_handle = dst->Handle(),
                       regions = scheduler.RecordData(copies)](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyBuffer(src, dst_handle, regions.size(), regions.data());
     });
@@ -212,7 +212,7 @@ void Runtime::UpdateBuffer(const VideoCore::Buffer* dst, u64 offset, std::span<c
     constexpr std::size_t Piece = 32 * 1024; // vkCmdUpdateBuffer takes 64 KiB at most
     for (std::size_t at = 0; at < data.size(); at += Piece) {
         const auto piece = data.subspan(at, std::min(Piece, data.size() - at));
-        scheduler.RecordCrumb({.name = "UpdateBuffer (vk_runtime.cpp:215)"}, [handle = dst->Handle(), to = offset + at,
+        scheduler.RecordCrumb({.name = "runtime UpdateBuffer"}, [handle = dst->Handle(), to = offset + at,
                           bytes = scheduler.RecordData(piece)](vk::CommandBuffer cmdbuf) {
             cmdbuf.updateBuffer(handle, to, bytes.size_bytes(), bytes.data());
         });
@@ -228,7 +228,7 @@ void Runtime::InlineData(VideoCore::Buffer* dst, u64 offset, u32 value) {
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "InlineData (vk_runtime.cpp:231)"}, [handle = dst->Handle(), offset, value](vk::CommandBuffer cmdbuf) {
+    scheduler.RecordCrumb({.name = "runtime InlineData"}, [handle = dst->Handle(), offset, value](vk::CommandBuffer cmdbuf) {
         cmdbuf.updateBuffer(handle, offset, sizeof(value), &value);
     });
 
@@ -287,7 +287,7 @@ void Runtime::UploadImage(VideoCore::Image* dst, const VideoCore::Buffer* src,
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "UploadImage (vk_runtime.cpp:290)"}, [src_handle = src->Handle(), image = dst->GetImage(),
+    scheduler.RecordCrumb({.name = "runtime UploadImage"}, [src_handle = src->Handle(), image = dst->GetImage(),
                       regions = scheduler.RecordData(upload_copies)](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyBufferToImage(src_handle, image, vk::ImageLayout::eTransferDstOptimal,
                                  regions.size(), regions.data());
@@ -319,7 +319,7 @@ void Runtime::DownloadImage(VideoCore::Image* src, const VideoCore::Buffer* dst,
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "DownloadImage (vk_runtime.cpp:322)"}, [image = src->GetImage(), buffer = dst->Handle(),
+    scheduler.RecordCrumb({.name = "runtime DownloadImage"}, [image = src->GetImage(), buffer = dst->Handle(),
                       regions = scheduler.RecordData(download_copies)](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyImageToBuffer(image, vk::ImageLayout::eTransferSrcOptimal, buffer,
                                  regions.size(), regions.data());
@@ -380,7 +380,7 @@ void Runtime::CopyImage(VideoCore::Image* src, VideoCore::Image* dst) {
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "CopyImage (vk_runtime.cpp:383)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+    scheduler.RecordCrumb({.name = "runtime CopyImage"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                       regions](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
                          vk::ImageLayout::eTransferDstOptimal, regions);
@@ -439,7 +439,7 @@ void Runtime::CopyImageWithBuffer(VideoCore::Image* src, VideoCore::Image* dst,
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "CopyImageWithBuffer (vk_runtime.cpp:442)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+    scheduler.RecordCrumb({.name = "runtime CopyImageWithBuffer"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                       handle = buffer->Handle(), regions](vk::CommandBuffer cmdbuf) {
         for (const auto& [download, upload] : regions) {
             cmdbuf.copyImageToBuffer(src_image, vk::ImageLayout::eTransferSrcOptimal, handle, download);
@@ -511,7 +511,7 @@ void Runtime::CopyMip(VideoCore::Image* src, VideoCore::Image* dst, u32 mip, u32
         FlushBarriers();
     }
 
-    scheduler.RecordCrumb({.name = "CopyMip (vk_runtime.cpp:514)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+    scheduler.RecordCrumb({.name = "runtime CopyMip"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                       image_copy](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
                          vk::ImageLayout::eTransferDstOptimal, image_copy);
@@ -588,7 +588,7 @@ void Runtime::CopyDepthStencil(VideoCore::Image* src, VideoCore::Image* dst,
         .extent = {dst->info.size.width, dst->info.size.height, 1},
     };
 
-    scheduler.RecordCrumb({.name = "CopyDepthStencil (vk_runtime.cpp:591)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+    scheduler.RecordCrumb({.name = "runtime CopyDepthStencil"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                       region](vk::CommandBuffer cmdbuf) {
         cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
                          vk::ImageLayout::eTransferDstOptimal, region);
@@ -642,7 +642,7 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
             .extent = CopyExtent(src->info, src_range.base.level, dst->info, dst_range.base.level,
                                  copy.depth),
         };
-        scheduler.RecordCrumb({.name = "ResolveImage (vk_runtime.cpp:645)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+        scheduler.RecordCrumb({.name = "runtime ResolveImage"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                           region](vk::CommandBuffer cmdbuf) {
             cmdbuf.copyImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
                              vk::ImageLayout::eTransferDstOptimal, region);
@@ -666,7 +666,7 @@ void Runtime::ResolveImage(VideoCore::Image* src, VideoCore::Image* dst,
             .extent = CopyExtent(src->info, src_range.base.level, dst->info, dst_range.base.level,
                                  copy.depth),
         };
-        scheduler.RecordCrumb({.name = "ResolveImage (vk_runtime.cpp:669)"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
+        scheduler.RecordCrumb({.name = "runtime ResolveImage"}, [src_image = src->GetImage(), dst_image = dst->GetImage(),
                           region](vk::CommandBuffer cmdbuf) {
             cmdbuf.resolveImage(src_image, vk::ImageLayout::eTransferSrcOptimal, dst_image,
                                 vk::ImageLayout::eTransferDstOptimal, region);
@@ -695,7 +695,7 @@ void Runtime::ClearImage(VideoCore::Image* dst, const VideoCore::SubresourceRang
         .baseArrayLayer = range.base.layer,
         .layerCount = range.extent.layers,
     };
-    scheduler.RecordCrumb({.name = "ClearImage (vk_runtime.cpp:698)"}, [image = dst->GetImage(), color = clear_value.color,
+    scheduler.RecordCrumb({.name = "runtime ClearImage"}, [image = dst->GetImage(), color = clear_value.color,
                       vk_range](vk::CommandBuffer cmdbuf) {
         cmdbuf.clearColorImage(image, vk::ImageLayout::eTransferDstOptimal, color, vk_range);
     });
