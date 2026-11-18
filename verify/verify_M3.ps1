@@ -105,9 +105,26 @@ try {
         $threads = ($lines | Where-Object { $_ -like "Runtime: guest thread '*created*" }).Count
         $files = ($lines | Where-Object { $_ -like 'Runtime: files opened=*' } | Select-Object -Last 1)
         Set-Crit 'M4' 'PASS' 'activity counts' ([ordered]@{ save_mounts = $mounts; guest_threads_created = $threads; file_summary = $files; stop_context = @($api) })
-        Set-Crit 'M5' 'NA' 'ExitWait1 return and the save round trip are measured when the platform marker is reached' $null
+        # M5 save round trip: a previous run wrote SYSTEM00000000 under <repo>\user; this run mounts it as existing.
+        $saveDir = Join-Path $Root 'user\savedata\1\CUSA04957\SYSTEM00000000'
+        $dataBin = Join-Path $saveDir 'data.bin'
+        $target = $lines | Where-Object { $_ -match "sceSaveDataMount target host='.*SYSTEM00000000', exists=(\d)" } | Select-Object -First 1
+        $existed = ($target -match 'exists=1')
+        $dataSize = 0
+        if (Test-Path -LiteralPath $dataBin) { $dataSize = (Get-Item -LiteralPath $dataBin).Length }
+        if ($existed -and $dataSize -gt 0) {
+            Set-Crit 'M5' 'PASS' 'save round trip: SYSTEM00000000 written by an earlier run was mounted again as existing' ([ordered]@{ data_bin_bytes = $dataSize })
+        } elseif ($target -and $dataSize -gt 0) {
+            Set-Crit 'M5' 'EXPLAIN' 'first run: the system save was created now; run the script once more to prove it loads back' ([ordered]@{ data_bin_bytes = $dataSize })
+        } else {
+            Set-Crit 'M5' 'FAIL' 'no system save was created under <repo>\user' ([ordered]@{ data_bin_bytes = $dataSize; mount_line = $target })
+        }
+        # M6 ExitWait1: the title scene mounts SYSTEM00000000 only after MenuTitle ExitWait1 and ExitWait2 return 1
+        # (old-tree logs, knowledge.md 2026-11-05); the read-only observer (G-44) is not wired to its object yet.
+        if ($mount) { Set-Crit 'M6' 'PASS' 'ExitWait1 returned (inferred: the system save mount follows ExitWait1 and ExitWait2 in the title scene)' $null }
+        else { Set-Crit 'M6' 'EXPLAIN' 'ExitWait1 not shown: the system save mount was not reached' $null }
     } else {
-        foreach ($id in @('M2', 'M3', 'M4', 'M5')) { Set-Crit $id 'FAIL' 'not measured: the run could not start' }
+        foreach ($id in @('M2', 'M3', 'M4', 'M5', 'M6')) { Set-Crit $id 'FAIL' 'not measured: the run could not start' }
     }
 } catch {
     Set-Crit 'M0' 'FAIL' ('script error: ' + $_.Exception.Message)
