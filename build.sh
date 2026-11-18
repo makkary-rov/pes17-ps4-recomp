@@ -106,4 +106,6 @@ if [[ ${1:-} == --test ]]; then
     out/title-infra-test
     "$CC" -std=c11 -D_GNU_SOURCE -DPES_NO_TRACE -O2 -g -Wall -Wextra -Werror -pthread -Isrc tests/test_title_infra.c src/runtime_trace.c src/runtime_patch.c -o out/title-infra-notrace-test
     out/title-infra-notrace-test
+    "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_aniso_stage.cpp -o out/aniso-stage-test
+    out/aniso-stage-test
 fi

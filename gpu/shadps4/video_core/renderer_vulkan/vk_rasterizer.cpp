@@ -4,6 +4,7 @@
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
+#include "pes_aniso.h"
 #include "pes_platform.h"
 #include <map>
 #include <unordered_set>
@@ -3170,7 +3171,7 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
 // Behind the temporal upscaler the output shows the detail of the output's mip level, and
 // surfaces seen at a grazing angle (stairs, floors, walls along the view) stay blurred.
 // Mipmapped linear samplers of graphics draws get PES_ANISO (16; 0 = the game's) times.
-void Rasterizer::ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth) const {
+void Rasterizer::ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth, bool stage_mips) const {
     static const int forced = [] {
         const char* value = std::getenv("PES_ANISO");
         return value ? std::atoi(value) : 16;
@@ -3186,7 +3187,7 @@ void Rasterizer::ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth) const {
                         sharp.MaxAniso());
         }
     }
-    if (forced <= 1 || is_depth || pipeline_is_compute || PesToggle::Disabled(PesToggle::ForcedAniso) ||
+    if (forced <= 1 || is_depth || pipeline_is_compute || !stage_mips || PesToggle::Disabled(PesToggle::ForcedAniso) ||
         sharp.mip_filter == AmdGpu::MipFilter::None ||
         (sharp.xy_min_filter != AmdGpu::Filter::Bilinear &&
          sharp.xy_min_filter != AmdGpu::Filter::AnisoLinear)) {
@@ -3207,11 +3208,22 @@ void Rasterizer::ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth) const {
 
 void Rasterizer::BindSamplers(const Shader::Info& stage, const PreparedStage* prepared,
                               Shader::Backend::Bindings& binding, u32& write_index) {
+    // Forced anisotropy only where the stage reads a mipmapped image (pes_aniso.h).
+    std::array<u32, 32> levels{};
+    u32 num_levels = 0;
+    for (u32 i = 0; i < stage.images.size() && num_levels < levels.size(); ++i) {
+        const auto tsharp = prepared ? prepared->image_sharps[i] : stage.images[i].GetSharp(stage);
+        if (tsharp.Address() != 0) {
+            levels[num_levels++] = tsharp.NumLevels();
+        }
+    }
+    const bool stage_mips =
+        Pes::StageWantsForcedAniso(std::span<const u32>{levels.data(), num_levels});
     for (u32 sampler_index = 0; sampler_index < stage.samplers.size(); ++sampler_index) {
         const auto& sampler = stage.samplers[sampler_index];
         auto ssharp =
             prepared ? prepared->sampler_sharps[sampler_index] : sampler.GetSharp(stage);
-        ForceAnisotropy(ssharp, sampler.is_depth);
+        ForceAnisotropy(ssharp, sampler.is_depth, stage_mips);
         const auto vk_sampler = texture_cache.GetSampler(
             ssharp, Regs().ta_bc_base, sampler.is_depth, sampler.is_depth ? 0.0f : sampler_lod_bias);
         image_infos.emplace_back(vk_sampler, VK_NULL_HANDLE, vk::ImageLayout::eGeneral);

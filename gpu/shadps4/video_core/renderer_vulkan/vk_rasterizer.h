@@ -351,7 +351,7 @@ private:
                       Shader::Backend::Bindings& binding, u32& write_index, bool& barrier,
                       bool on_helper = false);
     bool BindResources(const Pipeline* pipeline);
-    void ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth) const;
+    void ForceAnisotropy(AmdGpu::Sampler& sharp, bool is_depth, bool stage_mips) const;
     void BindSamplers(const Shader::Info& stage, const PreparedStage* prepared,
                       Shader::Backend::Bindings& binding, u32& write_index);
     /// pes: a stage's resolved textures remembered by its prepared T# hashes
