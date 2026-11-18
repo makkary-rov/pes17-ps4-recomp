@@ -26,6 +26,13 @@ int main() {
           "the same tiling is reused, not written back");
     check(Pes::WriteBackBeforeRetiledView({4, 14, true}, kit_drawn, true),
           "alternate tiling alone is a different layout");
+    // Kit bytes written as BC3 blocks through an RGBA8 storage view, then sampled as BC3.
+    check(Pes::WriteBackOverlapBeforeUpload(true, true),
+          "a texture over GPU-written memory gets those bytes first");
+    check(!Pes::WriteBackOverlapBeforeUpload(true, false),
+          "memory the GPU never wrote is already current");
+    check(!Pes::WriteBackOverlapBeforeUpload(false, true),
+          "a new render/storage target is written before it is read");
     if (failures) {
         return EXIT_FAILURE;
     }

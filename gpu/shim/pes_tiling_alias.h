@@ -21,6 +21,16 @@ inline bool SameGuestTiling(const GuestTiling& a, const GuestTiling& b) {
     return a.array_mode == b.array_mode && a.tile_mode == b.tile_mode && a.alt_tile == b.alt_tile;
 }
 
+/// A new image built from guest memory to be read (a texture or the displayed buffer) over a
+/// range that GPU-written images overlap, under another format or layout, must see their bytes:
+/// on the console it is the same memory. The upstream title writes each unlicensed kit as BC3
+/// blocks through an RGBA8 storage view and samples it through a BC3 texture view; without the
+/// write-back the BC3 image was uploaded from memory that never received them (black kits).
+/// A new render or storage target is written before it is read, so it needs no write-back.
+inline bool WriteBackOverlapBeforeUpload(bool new_image_is_read, bool overlap_gpu_modified) {
+    return new_image_is_read && overlap_gpu_modified;
+}
+
 /// Whether the cached image must be written back to guest memory before a view with the
 /// requested tiling is created over the same address from memory.
 inline bool WriteBackBeforeRetiledView(const GuestTiling& requested, const GuestTiling& cached,

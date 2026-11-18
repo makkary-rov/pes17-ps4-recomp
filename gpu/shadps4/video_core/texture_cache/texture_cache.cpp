@@ -918,6 +918,26 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
     // Create and register a new image
     if (!image_id) {
         view_mip = view_slice = -1;
+        // pes: the new image is uploaded from guest memory; GPU-written images over the same
+        // range (another format or layout) store their bytes there first (pes_tiling_alias.h).
+        const bool new_image_is_read =
+            desc.type == BindingType::Texture || desc.type == BindingType::VideoOut;
+        for (const auto cache_id : image_ids) {
+            Image& overlap = slot_images[cache_id];
+            if (!Pes::WriteBackOverlapBeforeUpload(
+                    new_image_is_read, True(overlap.flags & ImageFlagBits::GpuModified)) ||
+                overlap.info.pixel_format == vk::Format::eUndefined) {
+                continue;
+            }
+            bool stored = true;
+            if (overlap.info.props.is_tiled) {
+                stored = WriteBackTiledImage(cache_id);
+            } else {
+                DownloadImageMemory(cache_id, true);
+            }
+            TraceOverlap(info, desc.type, cache_id, &overlap,
+                         stored ? "writeback" : "writeback_failed", "GPU-written overlap");
+        }
         TraceOverlap(info, desc.type, {}, nullptr, "create", "no candidate covers requested view");
         image_id = slot_images.insert(instance, runtime, slot_image_views, info);
         RegisterImage(image_id);
