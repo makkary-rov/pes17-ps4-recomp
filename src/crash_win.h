@@ -18,6 +18,9 @@ void crash_win_dump(EXCEPTION_POINTERS *exception);
 void crash_win_dump_external(HANDLE process, DWORD pid, DWORD tid, EXCEPTION_POINTERS *exception);
 /* Capture a deliberate fatal stop without raising/reclassifying a CPU fault. */
 void crash_win_dump_fatal(const char *reason);
+/* Writes a minidump of this process (threads, registers, referenced memory) to path; 1 on success.
+ * crash_win_dump and crash_win_dump_fatal keep one per process under user\crashes. */
+int crash_win_write_minidump(const char *path, EXCEPTION_POINTERS *exception);
 #ifdef __cplusplus
 }
 #endif

@@ -108,6 +108,10 @@ if [[ ${1:-} == --test ]]; then
     out/title-infra-notrace-test
     "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_aniso_stage.cpp -o out/aniso-stage-test
     out/aniso-stage-test
+    if [[ -n $windows ]]; then
+        "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_minidump.c src/win32_crash.c -o out/minidump-test
+        out/minidump-test out/minidump-test.dmp
+    fi
     "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim -Igpu/shadps4 tests/test_readback_default.cpp -o out/readback-default-test
     out/readback-default-test
 fi
