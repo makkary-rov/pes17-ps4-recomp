@@ -49,6 +49,10 @@ public:
         }
     }
 
+    bool HasStage(Shader::SwStage stage) const noexcept {
+        return stages[u32(stage)] != nullptr;
+    }
+
     const Shader::Info& GetStage(Shader::SwStage stage) const noexcept {
         return *stages[u32(stage)];
     }

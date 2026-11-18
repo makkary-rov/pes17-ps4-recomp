@@ -415,6 +415,30 @@ bool IsKnownFormat(AmdGpu::DataFormat data_fmt, AmdGpu::NumberFormat num_fmt) {
 }
 } // namespace
 
+// pes diagnostics: PES_SKIP_PS=hash[,hash...] (hex pixel shader hashes, as the frame capture prints
+// them) skips the draws that use those pixel shaders. For A/B tests of single passes; off by default.
+static bool SkipByPixelShader(const GraphicsPipeline* pipeline) {
+    static const std::vector<u64> hashes = [] {
+        std::vector<u64> list;
+        if (const char* env = std::getenv("PES_SKIP_PS")) {
+            for (const char* p = env; *p;) {
+                char* end = nullptr;
+                const u64 h = std::strtoull(p, &end, 16);
+                if (end == p) break;
+                list.push_back(h);
+                p = *end ? end + 1 : end;
+            }
+            std::printf("GPU: PES_SKIP_PS skips %zu pixel shader(s)\n", list.size());
+        }
+        return list;
+    }();
+    if (hashes.empty() || !pipeline->HasStage(Shader::SwStage::Fragment)) {
+        return false;
+    }
+    const u64 h = pipeline->GetStage(Shader::SwStage::Fragment).pgm_hash;
+    return std::find(hashes.begin(), hashes.end(), h) != hashes.end();
+}
+
 bool Rasterizer::FilterDraw() {
     const auto& regs = Regs();
     if (regs.color_control.mode == AmdGpu::ColorControl::OperationMode::EliminateFastClear) {
@@ -1445,6 +1469,9 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset, const PreparedDraw* pre
     if (!pipeline) {
         return;
     }
+    if (SkipByPixelShader(pipeline)) {
+        return;
+    }
     if (pipelined && FilterDrawPasses()) {
         PostDraw(pipeline, used_prepared, is_indexed, index_offset);
         return;
@@ -1694,6 +1721,9 @@ void Rasterizer::DrawIndirect(bool is_indexed, VAddr arg_address, u32 offset, u3
     };
     const GraphicsPipeline* pipeline = pipeline_cache.GetGraphicsPipeline(params);
     if (!pipeline) {
+        return;
+    }
+    if (SkipByPixelShader(pipeline)) {
         return;
     }
     const IndirectDraw indirect = {arg_address + offset, count_address, stride, max_count};
