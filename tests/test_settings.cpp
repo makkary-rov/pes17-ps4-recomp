@@ -104,6 +104,31 @@ int main() {
     { std::ofstream file(path); file << "camera_fov_scale=nan\ncamera_distance_scale=-10\ncamera_height_scale=inf\n"; }
     PesSettings::Load();
     assert(s.camera_fov_scale == 1.0f && s.camera_distance_scale == 0.5f && s.camera_height_scale == 1.0f);
+    // The settings window writes these Display lines (launcher/settings_display_ini.c); the game must
+    // read them as the window meant: borderless at 1280x720, vsync off, 30 fps in game, low quality,
+    // motion blur off, FSR 3.1 in Performance mode.
+    {
+        std::ofstream file(path);
+        file << "display_mode=borderless\nfullscreen=1\noutput_res=1280x720\nvsync=0\nfps_ingame=30\n"
+                "fps_replay=60\nquality=low\neffect_motion_blur=0\nmotion_blur=0\nupscaler=fsr3\npreset=3\n";
+    }
+    s.display_mode = PesSettings::DisplayWindowed;
+    s.fullscreen = false;
+    s.vsync = true;
+    s.fps_ingame = 60;
+    s.fps_replay = 30;
+    s.quality = 2;
+    s.upscaler = PesSettings::UpscalerOff;
+    s.preset = PesSettings::NativeAA;
+    PesSettings::Load();
+    assert(s.display_mode == PesSettings::DisplayBorderless && s.fullscreen);
+    assert(PesSettings::OutputWidths[s.output_res] == 1280 && PesSettings::OutputHeights[s.output_res] == 720);
+    assert(!s.vsync && s.fps_ingame == 30 && s.fps_replay == 60 && s.quality == 0);
+    assert(s.upscaler == PesSettings::UpscalerFsr3 && s.preset == PesSettings::Performance);
+    for (int e = 0; e < PesSettings::EffectCount; ++e) {
+        if (std::string(PesSettings::Effects[e].key) == "effect_motion_blur") assert(!s.effects[e]);
+    }
     std::filesystem::remove(temporary);
     std::puts("PASS: settings save keeps other keys, menu position");
+    std::puts("PASS: display lines from the settings window are read by the game");
 }

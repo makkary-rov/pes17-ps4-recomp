@@ -120,6 +120,8 @@ if [[ ${1:-} == --test ]]; then
     out/settings-pad-test
     "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_settings_tone.c launcher/settings_tone.c -o out/settings-tone-test -lm
     out/settings-tone-test
+    "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_settings_display_file.c launcher/settings_display_ini.c launcher/settings_ini.c launcher/settings_model.c launcher/settings_keys.c launcher/settings_pad.c -o out/settings-display-file-test
+    out/settings-display-file-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_display_modes.cpp gpu/shim/pes_settings.cpp -o out/display-modes-test
     (cd out && ./display-modes-test)
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings_keys.cpp gpu/shim/pes_settings.cpp -o out/settings-keys-test
@@ -127,7 +129,7 @@ if [[ ${1:-} == --test ]]; then
     if [[ -n $windows ]]; then
         # The settings window shell (launcher/): Windows only, with its visual-style manifest.
         windres --input launcher/pes17settings.rc --output out/pes17settings.res.o -O coff
-        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c launcher/settings_display.c launcher/settings_keyboard.c launcher/settings_controller.c launcher/settings_audio.c launcher/settings_tone.c launcher/settings_online.c launcher/settings_pad.c launcher/settings_keys.c launcher/settings_ini.c launcher/settings_model.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32 -lwinmm -lshell32 -lm
+        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c launcher/settings_display.c launcher/settings_keyboard.c launcher/settings_controller.c launcher/settings_audio.c launcher/settings_tone.c launcher/settings_online.c launcher/settings_display_ini.c launcher/settings_pad.c launcher/settings_keys.c launcher/settings_ini.c launcher/settings_model.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32 -lwinmm -lshell32 -lm
     fi
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)

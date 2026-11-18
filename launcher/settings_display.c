@@ -16,6 +16,8 @@
 #include <string.h>
 #include "settings_model.h"
 #include "settings_display.h"
+#include "settings_display_ini.h"
+#include "settings_ini.h"
 
 #define PAGE_X 24
 #define PAGE_Y 150
@@ -211,7 +213,10 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
 
     /* Every control on the page takes the window font. */
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
-    SettingsDisplaySetValues(PesDisplayDefaults());
+    /* The saved values (the defaults for any the file does not have). */
+    PesDisplaySettings saved = PesDisplayDefaults();
+    PesIniLoadDisplay(PesConfigPath(), &saved);
+    SettingsDisplaySetValues(saved);
     UpdateScroll(g_page);
     ApplyScroll(g_page, 0);
 }

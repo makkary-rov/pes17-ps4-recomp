@@ -14,6 +14,7 @@
 #include "settings_controller.h"
 #include "settings_audio.h"
 #include "settings_online.h"
+#include "settings_display_ini.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -37,7 +38,8 @@ static void SaveAndClose(HWND hwnd) {
     SettingsControllerGet(pads);
     if (!PesIniSaveBindings(PesConfigPath(), keys, pads) ||
         !PesIniSavePadMethod(PesConfigPath(), SettingsControllerMethod()) ||
-        !PesIniSaveInt(PesConfigPath(), "audio_buffer", SettingsAudioBuffer())) {
+        !PesIniSaveInt(PesConfigPath(), "audio_buffer", SettingsAudioBuffer()) ||
+        !PesIniSaveDisplay(PesConfigPath(), SettingsDisplayGetValues())) {
         MessageBoxW(hwnd, L"The settings could not be saved.", L"Settings", MB_OK | MB_ICONERROR);
         return;
     }

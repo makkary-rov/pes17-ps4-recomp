@@ -416,3 +416,7 @@ const char* UpscalerName(int upscaler) {
 }
 
 } // namespace PesSettings
+
+// pes: the Display values the video core reads (emulator_settings.h).
+long PesFpsInGame() { return PesSettings::Get().fps_ingame.load(); }
+bool PesVsync() { return PesSettings::Get().vsync.load(); }

@@ -10,6 +10,11 @@
 
 enum GpuReadbacksMode : int { Disabled, Relaxed, Precise };
 
+// pes: the settings file's Display values (pes_settings.cpp): the in-game frame rate (60 or 30) and
+// vertical sync. The PES_* environment variables still override them.
+long PesFpsInGame();
+bool PesVsync();
+
 class EmulatorSettingsImpl {
 public:
     static EmulatorSettingsImpl* GetInstance() { static EmulatorSettingsImpl s; return &s; }
@@ -35,8 +40,10 @@ public:
         // and older launchers that still request Mailbox/Immediate/Relaxed.
         if (RequiresFifoForFrameRate()) return "Fifo";
 #endif
+        // pes: "Wait for vertical sync" in the settings file: Mailbox (synchronized) when on, Immediate
+        // (no sync, may tear) when off.
         const char* v = std::getenv("PES_PRESENT_MODE");
-        return v ? v : "Mailbox";
+        return v ? v : (PesVsync() ? "Mailbox" : "Immediate");
     }
     int GetRcasAttenuation() { static const auto value = int(Number("PES_RCAS_ATTENUATION", 250)); return value; }
     // pes: Relaxed by default: without readbacks FaceGen reads stale GPU-written vertices
@@ -77,7 +84,8 @@ public:
     u32 GetFrameLimit() {
         static const u32 value = [] {
 #ifdef _WIN32
-            const long fps = Number("PES_FPS_LIMIT", GetInstance()->GetVblankFrequency());
+            // pes: the in-game frame rate of the settings file (60 or 30) unless PES_FPS_LIMIT is set.
+            const long fps = Number("PES_FPS_LIMIT", PesFpsInGame());
             return fps == 0 || fps == 30 || fps == 60 || fps == 90 || fps == 120 ? u32(fps) : 60u;
 #else
             return u32(std::max(0L, Number("PES_FPS_LIMIT", 0)));

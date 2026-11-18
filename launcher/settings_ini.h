@@ -25,6 +25,12 @@ int PesIniLoadPadMethod(const char *path, int *method);
 int PesIniSaveInt(const char *path, const char *key, int value);
 int PesIniLoadInt(const char *path, const char *key, int *value);
 
+/* The text after key= in the file (last line wins); returns 1 if the key is there, else 0 (buf is ""). */
+int PesIniLoadValue(const char *path, const char *key, char *buf, size_t size);
+/* Writes several key=value settings in one pass: a key's line is replaced in place, missing keys are
+ * appended, other lines are kept. Up to 32 keys. Returns 1 on success. */
+int PesIniSaveValues(const char *path, const char *const keys[], const char *const values[], int count);
+
 /* Reads the bindings. Returns bit 1 if the file had key lines (keys set), bit 2 if it had pad lines
  * (pads set for the bindable slots), 0 if neither (nothing changed, so the caller keeps its defaults). */
 int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);

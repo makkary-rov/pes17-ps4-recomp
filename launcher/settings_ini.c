@@ -196,6 +196,75 @@ int PesIniLoadPadMethod(const char *path, int *method) {
     return found;
 }
 
+/* The text after key= (trailing spaces and CR removed). Returns 1 if the file has the key; the last line
+ * with it wins, as the game reads it. */
+int PesIniLoadValue(const char *path, const char *key, char *buf, size_t size) {
+    if (!buf || size == 0) return 0;
+    buf[0] = '\0';
+    char *text = ReadAll(path);
+    if (!text) return 0;
+    char prefix[64];
+    snprintf(prefix, sizeof(prefix), "%s=", key);
+    const size_t plen = strlen(prefix);
+    int found = 0;
+    const char *p = text;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        if (strncmp(p, prefix, plen) == 0) {
+            const char *start = p + plen;
+            size_t len = end ? (size_t)(end - start) : strlen(start);
+            while (len > 0 && (start[len - 1] == ' ' || start[len - 1] == '\r' || start[len - 1] == '\t')) --len;
+            if (len >= size) len = size - 1;
+            memcpy(buf, start, len);
+            buf[len] = '\0';
+            found = 1;
+        }
+        if (!end) break;
+        p = end + 1;
+    }
+    free(text);
+    return found;
+}
+
+/* Writes several key=value settings in one pass. Each key's first line is replaced in place (a repeated
+ * line of the same key is dropped); keys not in the file are appended. Other lines are kept. Up to 32 keys. */
+int PesIniSaveValues(const char *path, const char *const keys[], const char *const values[], int count) {
+    if (count <= 0 || count > 32) return 0;
+    char *old = OldText(path);
+    if (!old) return 0;
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *out = fopen(tmp, "wb");
+    if (!out) { free(old); return 0; }
+    int written[32] = {0};
+    int bad = 0;
+    const char *p = old;
+    while (*p && !bad) {
+        const char *end = strchr(p, '\n');
+        const size_t len = end ? (size_t)(end - p) + 1 : strlen(p);
+        int match = -1;
+        for (int k = 0; k < count && match < 0; ++k) {
+            const size_t kl = strlen(keys[k]);
+            if (strncmp(p, keys[k], kl) == 0 && p[kl] == '=') match = k;
+        }
+        if (match < 0) {
+            if (fwrite(p, 1, len, out) != len) bad = 1;
+            else if (p[len - 1] != '\n') fputc('\n', out);
+        } else if (!written[match]) {
+            fprintf(out, "%s=%s\n", keys[match], values[match]);
+            written[match] = 1;
+        }
+        p += len;
+    }
+    free(old);
+    for (int k = 0; k < count && !bad; ++k) {
+        if (!written[k]) fprintf(out, "%s=%s\n", keys[k], values[k]);
+    }
+    const int closed = fclose(out) == 0;
+    if (bad || !closed) { remove(tmp); return 0; }
+    return ReplaceFile(path, tmp);
+}
+
 /* Writes one whole-number setting, key=value, replacing its line (or appending it). Other lines are kept. */
 int PesIniSaveInt(const char *path, const char *key, int value) {
     char *old = OldText(path);
