@@ -45,6 +45,43 @@ typedef struct { uint64_t base, size, init, tls_address, tls_memsz, tls_filesz, 
 static LinkedModule modules[16];
 static uint64_t module_count;
 static int entered_game;
+
+#ifdef _WIN32
+#include "title/cusa04957_observer.h"
+/* Read-only state observer (G-44): a host thread samples the match controller's mode and sub-state bytes
+ * every 100 ms through a pointer chain read with ReadProcessMemory (a bad pointer cannot fault), and prints
+ * "Observer: t=<seconds> mode=<m> sub=<s>" on every change and every 5 s while a controller exists.
+ * It never writes guest memory. */
+static uint64_t observer_image_size;
+static DWORD WINAPI state_observer(void *unused) {
+    (void)unused;
+    ULONGLONG start = GetTickCount64(), last_print = 0;
+    int last_mode = -1, last_sub = -1;
+    uint64_t controller = 0;
+    for (;;) {
+        Sleep(100);
+        if (PES_OBSERVER_CONTROLLER_GLOBAL + sizeof(controller) > observer_image_size) return 0;
+        SIZE_T got = 0;
+        if (!ReadProcessMemory(GetCurrentProcess(), image + PES_OBSERVER_CONTROLLER_GLOBAL, &controller, sizeof(controller), &got)
+            || got != sizeof(controller) || !controller) continue;
+        unsigned char state[2];
+        if (!ReadProcessMemory(GetCurrentProcess(), (void *)(uintptr_t)(controller + PES_OBSERVER_MODE_OFFSET), state, 2, &got) || got != 2)
+            continue;
+        ULONGLONG now = GetTickCount64() - start;
+        if (state[0] != last_mode || state[1] != last_sub || now - last_print >= 5000) {
+            printf("Observer: t=%.1f mode=%u sub=%u\n", now / 1000.0, state[0], state[1]);
+            fflush(stdout);
+            last_mode = state[0]; last_sub = state[1]; last_print = now;
+        }
+    }
+}
+static void start_state_observer(uint64_t image_size) {
+    if (getenv("PES_NO_OBSERVER")) return;
+    observer_image_size = image_size;
+    HANDLE h = CreateThread(NULL, 0, state_observer, NULL, 0, NULL);
+    if (h) CloseHandle(h);
+}
+#endif
 static int gpu_enabled;
 
 static __attribute__((noreturn)) void fail(const char *message) { fprintf(stderr, "ERROR: %s\n", message); exit(1); }
@@ -1228,6 +1265,9 @@ int main(int argc, char **argv) {
     printf("Entering original x86-64 code at guest offset 0x%" PRIx64 "\n", entry);
     if (stop_before_entry) { fflush(NULL); _exit(0); } /* --stop-before-entry: no jump into guest code */
     entered_game=1;
+#ifdef _WIN32
+    start_state_observer(size);
+#endif
     struct { uint64_t argc; const char *argv[2]; } params = {1, {"/app0/eboot.bin", NULL}};
 #ifdef _WIN32
     typedef void (ABI *Entry)(void *, void (ABI *)(void));
