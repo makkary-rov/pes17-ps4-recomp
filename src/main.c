@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Minimal x86-64 native loader experiment. Not a PS4 emulator or game port. */
 #define _GNU_SOURCE
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -409,11 +410,24 @@ static void report_exception(EXCEPTION_POINTERS *e) {
  * frames unwind by their unwind data, guest frames by the rbp chain. */
 enum { DUMP_THREADS = 512 };
 static struct { DWORD id; CONTEXT context; } dumped[DUMP_THREADS];
+/* The dump writes with WriteFile on the stderr handle, not stdio: a hung thread may hold the CRT
+ * stream lock, and the dump is what must still come out then. */
+static void dump_print(const char *format, ...) {
+    char line[1024];
+    va_list args;
+    va_start(args, format);
+    int n = vsnprintf(line, sizeof(line), format, args);
+    va_end(args);
+    if (n < 0) return;
+    if (n >= (int)sizeof(line)) n = (int)sizeof(line) - 1;
+    DWORD written;
+    WriteFile(GetStdHandle(STD_ERROR_HANDLE), line, (DWORD)n, &written, NULL);
+}
 static void dump_chain(CONTEXT c) {
     char where[512];
     for (int depth = 0; depth < 32 && c.Rip; ++depth) {
         describe(where, sizeof(where), (uintptr_t)c.Rip);
-        fprintf(stderr, "  #%d %s\n", depth, where);
+        dump_print("  #%d %s\n", depth, where);
         DWORD64 base = 0;
         RUNTIME_FUNCTION *function = guest_address((uintptr_t)c.Rip) ? NULL : RtlLookupFunctionEntry(c.Rip, &base, NULL);
         if (function) {
@@ -448,7 +462,7 @@ static unsigned __stdcall dump_thread(void *event) {
             CloseHandle(thread);
         }
         CloseHandle(snapshot);
-        fprintf(stderr, "Thread dump: %u threads\n", count);
+        dump_print("Thread dump: %u threads\n", count);
         for (unsigned i = 0; i < count; ++i) {
             char name[64] = "";
             HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, dumped[i].id);
@@ -459,16 +473,15 @@ static unsigned __stdcall dump_thread(void *event) {
             }
             if (thread) CloseHandle(thread);
             CONTEXT *c = &dumped[i].context;
-            fprintf(stderr, "thread %lu %s: rcx=%llx rdx=%llx rdi=%llx rsi=%llx\n", dumped[i].id, name, c->Rcx, c->Rdx, c->Rdi, c->Rsi);
+            dump_print("thread %lu %s: rcx=%llx rdx=%llx rdi=%llx rsi=%llx\n", dumped[i].id, name, c->Rcx, c->Rdx, c->Rdi, c->Rsi);
             RuntimeRecoverBuf recover;
             if (!RUNTIME_RECOVER_SET(recover)) {
                 runtime_fault_recover = &recover;
                 dump_chain(*c);
-            } else fprintf(stderr, "  (bad frame)\n");
+            } else dump_print("  (bad frame)\n");
             runtime_fault_recover = NULL;
         }
-        fprintf(stderr, "Thread dump end\n");
-        fflush(NULL);
+        dump_print("Thread dump end\n");
     }
     return 0;
 }
