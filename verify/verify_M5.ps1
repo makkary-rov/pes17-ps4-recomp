@@ -9,6 +9,7 @@
     Writes out\verify\M5-result.json and out\verify\M5-run.log. Criteria:
     E1 observer reported mode=15 sub=2; E2 the last observer sample in mode 15 is at or after -ReferenceSeconds;
     E3 no stop or fault before that sample; E4 the user's sign-off (-SignOff) is recorded.
+    -DumpAt 120,180 asks the runtime for a thread dump (every thread's guest call chain) at those seconds.
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File verify\verify_M5.ps1 -Game <path to your game folder> -SignOff "played a live match"
 #>
@@ -17,7 +18,8 @@ param(
     [int]$Seconds = 300,
     [double]$ReferenceSeconds = 109.4,
     [string]$SignOff = '',
-    [switch]$FileTrace
+    [switch]$FileTrace,
+    [int[]]$DumpAt = @()
 )
 
 $ErrorActionPreference = 'Continue'
@@ -70,7 +72,15 @@ try {
         $so = $p.StandardOutput.ReadToEndAsync()
         $se = $p.StandardError.ReadToEndAsync()
         $killed = $false
-        if (-not $p.WaitForExit($Seconds * 1000)) { try { $p.Kill(); $killed = $true } catch { } ; $p.WaitForExit(5000) | Out-Null }
+        $t0 = Get-Date
+        foreach ($at in ($DumpAt | Sort-Object)) {  # the runtime's dump thread waits on Local\pes-dump-<pid>
+            if ($at -ge $Seconds) { continue }
+            $wait = $at - ((Get-Date) - $t0).TotalSeconds
+            if ($wait -gt 0 -and $p.WaitForExit([int]($wait * 1000))) { break }
+            try { $ev = [System.Threading.EventWaitHandle]::OpenExisting('Local\pes-dump-' + $p.Id); [void]$ev.Set(); $ev.Dispose() } catch { }
+        }
+        $left = [math]::Max(0, $Seconds - ((Get-Date) - $t0).TotalSeconds)
+        if (-not $p.HasExited -and -not $p.WaitForExit([int]($left * 1000))) { try { $p.Kill(); $killed = $true } catch { } ; $p.WaitForExit(5000) | Out-Null }
         $code = $null
         if ($p.HasExited) { $code = $p.ExitCode }
         $Text = $so.Result + "`n" + $se.Result
