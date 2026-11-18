@@ -28,8 +28,18 @@ const char *PesPadSlotLabel(int slot);
 void PesKeyboardDefaults(int keys[PES_PAD_SLOTS]);
 
 /* Binds key to slot. The key is removed from any other slot first (one key, one slot); key 0 unbinds
- * the slot. Returns 0 for an out-of-range slot or an invalid key, 1 otherwise. */
+ * the slot. Returns 0 for an out-of-range slot or a key the game cannot read, 1 otherwise. */
 int PesKeyboardBind(int keys[PES_PAD_SLOTS], int slot, int key);
+
+/* The game's input name for a slot in the settings file (key.<name>=), e.g. "square" for X. */
+const char *PesSlotInputName(int slot);
+
+/* The SDL key name the game reads for a virtual key (e.g. "Keypad 8", "Return", "Z"), in buf.
+ * Returns 1 if the key can be bound, 0 if it cannot (then buf is empty). */
+int PesKeySdlName(int key, char *buf, size_t size);
+
+/* The virtual key for an SDL key name from the settings file, or 0 if unknown. */
+int PesKeyFromSdlName(const char *name);
 
 /* Writes the name of a virtual key into buf (NUL-terminated). Unknown keys become "Key 0xNN". */
 void PesKeyName(int key, char *buf, size_t size);

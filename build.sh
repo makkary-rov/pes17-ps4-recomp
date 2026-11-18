@@ -114,6 +114,8 @@ if [[ ${1:-} == --test ]]; then
     out/settings-model-test
     "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_settings_keys_model.c launcher/settings_keys.c -o out/settings-keys-model-test
     out/settings-keys-model-test
+    "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_settings_ini.c launcher/settings_ini.c launcher/settings_keys.c -o out/settings-ini-test
+    out/settings-ini-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_display_modes.cpp gpu/shim/pes_settings.cpp -o out/display-modes-test
     (cd out && ./display-modes-test)
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings_keys.cpp gpu/shim/pes_settings.cpp -o out/settings-keys-test
@@ -121,7 +123,7 @@ if [[ ${1:-} == --test ]]; then
     if [[ -n $windows ]]; then
         # The settings window shell (launcher/): Windows only, with its visual-style manifest.
         windres --input launcher/pes17settings.rc --output out/pes17settings.res.o -O coff
-        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c launcher/settings_display.c launcher/settings_keyboard.c launcher/settings_keys.c launcher/settings_model.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32
+        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c launcher/settings_display.c launcher/settings_keyboard.c launcher/settings_keys.c launcher/settings_ini.c launcher/settings_model.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32
     fi
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)

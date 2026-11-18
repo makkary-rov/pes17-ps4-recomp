@@ -10,12 +10,14 @@
 #include <wchar.h>
 #include "settings_keyboard.h"
 #include "settings_keys.h"
+#include "settings_ini.h"
 
 #define PAGE_X 24
 #define PAGE_Y 150
 #define PAGE_W 752
 #define PAGE_H 506
 #define IDB_CONTROLLER_KB 200
+#define IDB_ICON_BASE 210  /* icon of slot s is IDB_ICON_BASE + s (launcher/assets/icon_NN.bmp) */
 #define ID_BIND_BASE 500  /* button for slot s is ID_BIND_BASE + s */
 #define ID_REVERT 600
 
@@ -104,9 +106,10 @@ static void Column(HWND p, const int slots[12], int chip_x, int button_x) {
     for (int i = 0; i < 12; ++i) {
         const int s = slots[i];
         const int y = 115 + 33 * i;
-        wchar_t chip[16];
-        swprintf(chip, 16, L"%S", PesPadSlotLabel(s));
-        Make(p, L"STATIC", chip, SS_CENTER | SS_CENTERIMAGE, chip_x, y, 58, 26, 0);
+        /* The button's icon, centred in its column. */
+        HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 17, y + 1, 24, 24, 0);
+        HBITMAP bmp = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_ICON_BASE + s));
+        if (bmp) SendMessageW(icon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmp);
         g_binds[s] = Make(p, L"BUTTON", L"", BS_PUSHBUTTON | WS_TABSTOP, button_x, y, 130, 26, ID_BIND_BASE + s);
     }
 }
@@ -138,6 +141,7 @@ void SettingsKeyboardCreate(HWND parent, HFONT font) {
 
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
     PesKeyboardDefaults(g_keys);
+    PesIniLoadKeyboard(PesConfigPath(), g_keys); /* the saved bindings, if the file has any */
     RefreshAll();
     ShowWindow(g_page, SW_HIDE);
 }

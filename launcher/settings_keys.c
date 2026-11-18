@@ -18,6 +18,19 @@ static const char *const kSlotLabels[PES_PAD_SLOTS] = {
     "RS Up", "RS Down", "RS Left", "RS Right",
 };
 
+/* The game's input names (runtime_pad.c input_names) for the 24 slots, in slot order. */
+static const char *const kInputNames[PES_PAD_SLOTS] = {
+    "square", "cross", "circle", "triangle", "l2", "r2", "l1", "r1",
+    "options", "touchpad", "l3", "r3",
+    "up", "down", "left", "right",
+    "move_up", "move_down", "move_left", "move_right",
+    "look_up", "look_down", "look_left", "look_right",
+};
+
+const char *PesSlotInputName(int slot) {
+    return slot >= 0 && slot < PES_PAD_SLOTS ? kInputNames[slot] : "";
+}
+
 const char *PesPadSlotLabel(int slot) {
     return slot >= 0 && slot < PES_PAD_SLOTS ? kSlotLabels[slot] : "";
 }
@@ -32,9 +45,45 @@ void PesKeyboardDefaults(int keys[PES_PAD_SLOTS]) {
     for (int i = 0; i < PES_PAD_SLOTS; ++i) keys[i] = defaults[i];
 }
 
+int PesKeySdlName(int key, char *buf, size_t size) {
+    if (size) buf[0] = '\0';
+    if (size == 0) return 0;
+    if (key >= 'A' && key <= 'Z') { snprintf(buf, size, "%c", key); return 1; }
+    if (key >= '0' && key <= '9') { snprintf(buf, size, "%c", key); return 1; }
+    if (key >= VK_NUMPAD0_KEY && key <= VK_NUMPAD0_KEY + 9) { snprintf(buf, size, "Keypad %d", key - VK_NUMPAD0_KEY); return 1; }
+    switch (key) {
+    case VK_UP_KEY: snprintf(buf, size, "Up"); return 1;
+    case VK_DOWN_KEY: snprintf(buf, size, "Down"); return 1;
+    case VK_LEFT_KEY: snprintf(buf, size, "Left"); return 1;
+    case VK_RIGHT_KEY: snprintf(buf, size, "Right"); return 1;
+    case VK_SPACE_KEY: snprintf(buf, size, "Space"); return 1;
+    case VK_RETURN_KEY: snprintf(buf, size, "Return"); return 1;
+    case VK_ESCAPE_KEY: snprintf(buf, size, "Escape"); return 1;
+    case VK_TAB_KEY: snprintf(buf, size, "Tab"); return 1;
+    case VK_BACK_KEY: snprintf(buf, size, "Backspace"); return 1;
+    case VK_SHIFT_KEY: snprintf(buf, size, "LShift"); return 1;
+    case VK_CONTROL_KEY: snprintf(buf, size, "LCtrl"); return 1;
+    case VK_MENU_KEY: snprintf(buf, size, "LAlt"); return 1;
+    default: return 0;
+    }
+}
+
+int PesKeyFromSdlName(const char *name) {
+    char candidate[32];
+    if (!name || !*name) return 0;
+    for (int key = 1; key <= 0xFE; ++key) {
+        if (PesKeySdlName(key, candidate, sizeof(candidate)) && strcmp(candidate, name) == 0) return key;
+    }
+    return 0;
+}
+
 int PesKeyboardBind(int keys[PES_PAD_SLOTS], int slot, int key) {
     if (slot < 0 || slot >= PES_PAD_SLOTS) return 0;
     if (key < 0 || key > 0xFE) return 0;
+    if (key != 0) {
+        char name[32];
+        if (!PesKeySdlName(key, name, sizeof(name))) return 0;
+    }
     if (key != 0) {
         for (int i = 0; i < PES_PAD_SLOTS; ++i) {
             if (keys[i] == key) keys[i] = 0;

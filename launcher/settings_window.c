@@ -10,6 +10,7 @@
 #include <string.h>
 #include "settings_display.h"
 #include "settings_keyboard.h"
+#include "settings_ini.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -21,6 +22,18 @@ static const wchar_t *kClassName = L"Pes17SettingsWindow";
 static const wchar_t *kTabNames[] = {L"Display", L"Keyboard", L"Controller", L"Audio", L"Online"};
 static const int kTabCount = (int)(sizeof(kTabNames) / sizeof(kTabNames[0]));
 static HWND g_tabs, g_ok, g_cancel;
+
+/* Saves what the tabs hold (the keyboard bindings for now) and closes the window. A failed save keeps
+ * the window open, so nothing is lost silently. */
+static void SaveAndClose(HWND hwnd) {
+    int keys[PES_PAD_SLOTS];
+    SettingsKeyboardGet(keys);
+    if (!PesIniSaveKeyboard(PesConfigPath(), keys)) {
+        MessageBoxW(hwnd, L"The settings could not be saved.", L"Settings", MB_OK | MB_ICONERROR);
+        return;
+    }
+    DestroyWindow(hwnd);
+}
 
 /* Returns the rectangle inside the tab control where the tab pages go (client coordinates). */
 static RECT PageRect(void) {
@@ -73,8 +86,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (LOWORD(wp) == ID_CANCEL) {
             DestroyWindow(hwnd);
         } else if (LOWORD(wp) == ID_OK) {
-            /* Saving is added in step A9 (launcher hook-up); for now OK closes the window. */
-            DestroyWindow(hwnd);
+            SaveAndClose(hwnd);
         }
         return 0;
     case WM_NOTIFY: {
