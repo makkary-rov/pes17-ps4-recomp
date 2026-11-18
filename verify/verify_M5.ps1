@@ -66,6 +66,8 @@ try {
         $psi.RedirectStandardInput = $true
         $psi.WorkingDirectory = $Root
         $psi.EnvironmentVariables['PATH'] = (Join-Path $MsysRoot 'clang64\bin') + ';' + $env:PATH
+        $psi.EnvironmentVariables['PES_OBSERVER'] = '1'  # the state observer (G-44) is off by default
+        if ($DumpAt.Count -gt 0) { $psi.EnvironmentVariables['PES_THREAD_DUMP'] = '1' }
         if ($FileTrace) { $psi.EnvironmentVariables['PES_FILE_TRACE'] = '1' }  # every open/read/stat goes to the log
         $p = [System.Diagnostics.Process]::Start($psi)
         $p.StandardInput.Close()

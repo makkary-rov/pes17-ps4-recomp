@@ -9,6 +9,7 @@
  *   IJKL d-pad (I up, K down, J left, L right). */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "runtime_trace.h"
 #include "gpu/pesgpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -540,7 +541,7 @@ static ABI int32_t pad_read_state(int32_t handle, PadData *data) {
     sample(data); ++reads;
     if (data->buttons != s_last_buttons) {
         s_last_buttons = data->buttons;
-        printf("Runtime: pad state handle=%d buttons=0x%x (Cross=%d, Circle=%d, Square=%d, Triangle=%d, Options=%d)\n",
+        if (pes_trace_enabled(PES_TRACE_KERNEL)) printf("Runtime: pad state handle=%d buttons=0x%x (Cross=%d, Circle=%d, Square=%d, Triangle=%d, Options=%d)\n",
                handle, data->buttons,
                !!(data->buttons & BTN_CROSS), !!(data->buttons & BTN_CIRCLE),
                !!(data->buttons & BTN_SQUARE), !!(data->buttons & BTN_TRIANGLE),

@@ -57,7 +57,7 @@ std::array<ArgsNote, ArgSlots> args_notes{};
 
 void Init(const Instance& instance) {
     const char* env = std::getenv("PES_BREADCRUMBS");
-    if (env && env[0] == '0') {
+    if (!env || env[0] != '1') { // off by default: PES_BREADCRUMBS=1 (a marker per command)
         return;
     }
     if (!instance.IsBufferMarkerSupported()) {

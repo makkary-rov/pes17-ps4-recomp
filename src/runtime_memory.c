@@ -6,6 +6,7 @@
  * encode 40-bit addresses, so host-default 0x7f... addresses would not fit. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "runtime_trace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -468,7 +469,7 @@ static ABI int32_t direct_allocate(int64_t low, int64_t high, uint64_t size,
     ensure_chunks(start,size);
     ++allocations; live_bytes += size;
     write_unlock();
-    printf("Runtime: direct allocation offset=0x%" PRIx64 ", size=%" PRIu64 " bytes, type=%d\n", start, size, type);
+    if (pes_trace_enabled(PES_TRACE_KERNEL)) printf("Runtime: direct allocation offset=0x%" PRIx64 ", size=%" PRIu64 " bytes, type=%d\n", start, size, type);
     return 0;
 }
 static int32_t map_direct_locked(void **out, uint64_t size, int prot, int flags, int64_t physical, uint64_t alignment) {
@@ -485,7 +486,7 @@ static ABI int32_t direct_map(void **out, uint64_t size, int prot, int flags, in
     int32_t result=map_direct_locked(out,size,prot,flags,physical,alignment);
     write_unlock();
     flush_hooks();
-    if (!result) printf("Runtime: mapped direct memory %p, size=%" PRIu64 ", prot=0x%x\n", *out, size, prot);
+    if (!result && pes_trace_enabled(PES_TRACE_KERNEL)) printf("Runtime: mapped direct memory %p, size=%" PRIu64 ", prot=0x%x\n", *out, size, prot);
     else printf("Runtime: mapping direct memory %#" PRIx64 ", size=%" PRIu64 " failed (error %#x)\n", (uint64_t)physical, size, (unsigned)result);
     return result;
 }

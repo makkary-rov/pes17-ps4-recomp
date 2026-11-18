@@ -77,7 +77,8 @@ static DWORD WINAPI state_observer(void *unused) {
     }
 }
 static void start_state_observer(uint64_t image_size) {
-    if (getenv("PES_NO_OBSERVER")) return;
+    const char *observer = getenv("PES_OBSERVER"); /* off by default: verify_M5/M6 set it */
+    if (!observer || observer[0] != '1') return;
     observer_image_size = image_size;
     HANDLE h = CreateThread(NULL, 0, state_observer, NULL, 0, NULL);
     if (h) CloseHandle(h);
@@ -873,7 +874,7 @@ int main(int argc, char **argv) {
     SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &throttling, sizeof(throttling));
     AddVectoredExceptionHandler(1, vectored_handler);
     SetUnhandledExceptionFilter(unhandled_filter);
-    start_dump_thread();
+    { const char *d = getenv("PES_THREAD_DUMP"); if (d && d[0] == '1') start_dump_thread(); } /* verify_M5 -DumpAt */
     start_hw_watch();
     main_argc = argc; main_argv = argv;
     HANDLE thread = (HANDLE)_beginthreadex(NULL, 64u << 20, loader_thread, NULL, 0, NULL);
