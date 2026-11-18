@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "settings_display.h"
+#include "settings_keyboard.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -57,7 +58,9 @@ static void CreateControls(HWND hwnd) {
     SendMessageW(g_ok, WM_SETFONT, (WPARAM)font, TRUE);
     SendMessageW(g_cancel, WM_SETFONT, (WPARAM)font, TRUE);
     SettingsDisplayCreate(hwnd, font);
+    SettingsKeyboardCreate(hwnd, font);
     SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
+    SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
     LayoutControls(hwnd);
 }
 
@@ -78,6 +81,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         NMHDR *nm = (NMHDR *)lp;
         if (nm->idFrom == ID_TABS && nm->code == TCN_SELCHANGE) {
             SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
+            SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
         }
         return 0;
     }
@@ -114,6 +118,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, LPWSTR cmdline, int show) {
 
     MSG m;
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
+        if (SettingsKeyboardFilter(&m)) continue; /* a key for a binding button being set */
         if (!IsDialogMessageW(hwnd, &m)) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
