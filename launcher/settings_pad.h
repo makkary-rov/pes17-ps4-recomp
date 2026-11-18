@@ -14,6 +14,10 @@
 
 #define PES_PAD_NAME_MAX 24
 
+/* How the gamepad bindings are chosen: XInput (the default, the fixed standard mapping, not editable)
+ * or DirectInput (manual mapping: the binding buttons can be set). */
+enum PesPadMethod { PES_PAD_XINPUT = 0, PES_PAD_DIRECTINPUT = 1 };
+
 /* The current gamepad defaults: one SDL name per slot, "" where a slot has none. */
 void PesPadDefaults(char names[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
 

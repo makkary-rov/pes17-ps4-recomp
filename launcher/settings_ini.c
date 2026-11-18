@@ -46,21 +46,20 @@ static char *ReadAll(const char *path) {
     return buf;
 }
 
-int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {
+/* The file's text for a save: empty for a new file, NULL if it exists but cannot be read. */
+static char *OldText(const char *path) {
     char *old = ReadAll(path);
-    if (!old) {
-        /* A missing file is fine; an unreadable one is not. */
-        FILE *probe = fopen(path, "rb");
-        if (probe) { fclose(probe); return 0; }
-        old = malloc(1);
-        if (!old) return 0;
-        old[0] = '\0';
-    }
-    char tmp[1024];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    FILE *out = fopen(tmp, "wb");
-    if (!out) { free(old); return 0; }
-    /* Keep every line that is not one of our key./pad. lines, in order. */
+    if (old) return old;
+    FILE *probe = fopen(path, "rb");
+    if (probe) { fclose(probe); return NULL; }
+    old = malloc(1);
+    if (old) old[0] = '\0';
+    return old;
+}
+
+/* Copies the lines of old to out, in order, leaving out the binding lines (drop_bindings) and/or the
+ * pad_input line (drop_method). Returns 0 on a write error. */
+static int CopyKept(const char *old, FILE *out, int drop_method, int drop_bindings) {
     const char *p = old;
     while (*p) {
         const char *end = strchr(p, '\n');
@@ -69,12 +68,36 @@ int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const ch
         const size_t copy = len < sizeof(line) - 1 ? len : sizeof(line) - 1;
         memcpy(line, p, copy);
         line[copy] = '\0';
-        if (SlotOfLine(line, NULL) < 0) {
-            if (fwrite(p, 1, len, out) != len) { fclose(out); remove(tmp); free(old); return 0; }
+        int drop = 0;
+        if (drop_bindings && SlotOfLine(line, NULL) >= 0) drop = 1;
+        if (drop_method && strncmp(p, "pad_input=", 10) == 0) drop = 1;
+        if (!drop) {
+            if (fwrite(p, 1, len, out) != len) return 0;
             if (len > 0 && p[len - 1] != '\n') fputc('\n', out);
         }
         p += len;
     }
+    return 1;
+}
+
+/* Replaces the file with the temporary one. Returns 1 on success. */
+static int ReplaceFile(const char *path, const char *tmp) {
+    remove(path);
+    if (rename(tmp, path) != 0) { remove(tmp); return 0; }
+    return 1;
+}
+
+int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {
+    char *old = OldText(path);
+    if (!old) return 0;
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *out = fopen(tmp, "wb");
+    if (!out) { free(old); return 0; }
+    /* Keep every line that is not one of our key./pad. lines, in order. */
+    const int kept = CopyKept(old, out, 0, 1);
+    free(old);
+    if (!kept) { fclose(out); remove(tmp); return 0; }
     fprintf(out, "# bindings (settings screen)\n");
     for (int s = 0; s < PES_PAD_SLOTS; ++s) {
         char name[32];
@@ -86,11 +109,8 @@ int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const ch
         fprintf(out, "pad.%s=%s\n", PesSlotInputName(s), pads[s]);
     }
     const int ok = fclose(out) == 0;
-    free(old);
     if (!ok) { remove(tmp); return 0; }
-    remove(path);
-    if (rename(tmp, path) != 0) { remove(tmp); return 0; }
-    return 1;
+    return ReplaceFile(path, tmp);
 }
 
 int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {
@@ -140,4 +160,38 @@ int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_
         }
     }
     return (key_found ? 1 : 0) | (pad_found ? 2 : 0);
+}
+
+int PesIniSavePadMethod(const char *path, int method) {
+    char *old = OldText(path);
+    if (!old) return 0;
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *out = fopen(tmp, "wb");
+    if (!out) { free(old); return 0; }
+    const int kept = CopyKept(old, out, 1, 0);
+    free(old);
+    if (!kept) { fclose(out); remove(tmp); return 0; }
+    fprintf(out, "pad_input=%s\n", method == PES_PAD_DIRECTINPUT ? "directinput" : "xinput");
+    const int ok = fclose(out) == 0;
+    if (!ok) { remove(tmp); return 0; }
+    return ReplaceFile(path, tmp);
+}
+
+int PesIniLoadPadMethod(const char *path, int *method) {
+    char *text = ReadAll(path);
+    if (!text) return 0;
+    int found = 0;
+    const char *p = text;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        if (strncmp(p, "pad_input=", 10) == 0) {
+            found = 1;
+            *method = strncmp(p + 10, "directinput", 11) == 0 ? PES_PAD_DIRECTINPUT : PES_PAD_XINPUT;
+        }
+        if (!end) break;
+        p = end + 1;
+    }
+    free(text);
+    return found;
 }

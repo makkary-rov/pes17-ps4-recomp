@@ -11,6 +11,8 @@ void SettingsControllerCreate(HWND parent, HFONT font);
 void SettingsControllerShow(int visible);
 /* Returns TRUE if the message was taken by the controller capture (Esc cancels a waiting button). */
 BOOL SettingsControllerFilter(const MSG *msg);
+/* The input method chosen on the tab: PES_PAD_XINPUT (default) or PES_PAD_DIRECTINPUT. */
+int SettingsControllerMethod(void);
 /* The gamepad bindings (SDL names; "" = unbound). */
 void SettingsControllerGet(char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
 void SettingsControllerSet(const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);

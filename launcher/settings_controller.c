@@ -22,6 +22,8 @@
 #define IDB_ICON_BASE 210  /* icon of slot s is IDB_ICON_BASE + s */
 #define ID_BIND_BASE 700   /* button for slot s is ID_BIND_BASE + s */
 #define ID_REVERT 800
+#define ID_PAD_DIRECT 900
+#define ID_PAD_XINPUT 901
 #define CAPTURE_TIMER 7
 #define CAPTURE_MS 8000
 
@@ -31,8 +33,9 @@ typedef struct { DWORD packet; PadState pad; } XState;
 typedef DWORD (WINAPI *GetStateFn)(DWORD, XState *);
 
 static const wchar_t *kControllerClass = L"PesSettingsController";
-static HWND g_page, g_binds[PES_PAD_SLOTS];
+static HWND g_page, g_binds[PES_PAD_SLOTS], g_direct_radio, g_xinput_radio;
 static char g_pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX];
+static int g_method = PES_PAD_XINPUT; /* XInput is the default: the fixed standard mapping */
 static int g_capture = -1;
 static DWORD g_capture_deadline;
 static XState g_baseline;
@@ -73,6 +76,15 @@ static void SetText(int slot) {
 
 static void RefreshAll(void) {
     for (int s = 0; s < PES_PAD_SLOTS; ++s) SetText(s);
+}
+
+/* XInput: the fixed standard mapping, the buttons cannot be set by hand. DirectInput: the bindable
+ * buttons can be set. Also shows which of the two radio buttons is chosen. */
+static void ApplyMethod(void) {
+    const int manual = g_method == PES_PAD_DIRECTINPUT;
+    for (int s = 0; s < PES_PAD_SLOTS; ++s) EnableWindow(g_binds[s], PesPadBindable(s) && manual);
+    SendMessageW(g_direct_radio, BM_SETCHECK, manual ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(g_xinput_radio, BM_SETCHECK, manual ? BST_UNCHECKED : BST_CHECKED, 0);
 }
 
 static void StopCapture(HWND page) {
@@ -124,9 +136,19 @@ static LRESULT CALLBACK ControllerPageProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
     case WM_COMMAND: {
         const int id = LOWORD(wp);
         if (HIWORD(wp) != BN_CLICKED) break;
+        if (id == ID_PAD_DIRECT || id == ID_PAD_XINPUT) {
+            const int method = id == ID_PAD_DIRECT ? PES_PAD_DIRECTINPUT : PES_PAD_XINPUT;
+            if (method == g_method) return 0;
+            StopCapture(hwnd);
+            g_method = method;
+            if (method == PES_PAD_XINPUT) PesPadDefaults(g_pads); /* back to the standard mapping */
+            ApplyMethod();
+            RefreshAll();
+            return 0;
+        }
         if (id >= ID_BIND_BASE && id < ID_BIND_BASE + PES_PAD_SLOTS) {
             const int slot = id - ID_BIND_BASE;
-            if (PesPadBindable(slot)) StartCapture(hwnd, slot);
+            if (PesPadBindable(slot) && g_method == PES_PAD_DIRECTINPUT) StartCapture(hwnd, slot);
             return 0;
         }
         if (id == ID_REVERT) {
@@ -166,11 +188,10 @@ static void Column(HWND p, const int slots[12], int chip_x, int button_x) {
     for (int i = 0; i < 12; ++i) {
         const int s = slots[i];
         const int y = 115 + 33 * i;
-        HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 17, y + 1, 24, 24, 0);
+        HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 9, y, 40, 26, 0);
         HBITMAP bmp = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_ICON_BASE + s));
         if (bmp) SendMessageW(icon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmp);
         g_binds[s] = Make(p, L"BUTTON", L"", BS_PUSHBUTTON | WS_TABSTOP, button_x, y, 130, 26, ID_BIND_BASE + s);
-        if (!PesPadBindable(s)) EnableWindow(g_binds[s], FALSE);
     }
 }
 
@@ -188,8 +209,8 @@ void SettingsControllerCreate(HWND parent, HFONT font) {
     HWND controller = Make(p, L"COMBOBOX", L"Controller 1", CBS_DROPDOWNLIST | WS_TABSTOP, 100, 30, 252, 120, 0);
     SendMessageW(controller, CB_ADDSTRING, 0, (LPARAM)L"Controller 1");
     SendMessageW(controller, CB_SETCURSEL, 0, 0);
-    Make(p, L"BUTTON", L"DirectInput", BS_AUTORADIOBUTTON, 446, 36, 120, 22, 0);
-    Make(p, L"BUTTON", L"XInput", BS_AUTORADIOBUTTON | WS_GROUP, 594, 36, 120, 22, 0);
+    g_direct_radio = Make(p, L"BUTTON", L"DirectInput", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 446, 36, 120, 22, ID_PAD_DIRECT);
+    g_xinput_radio = Make(p, L"BUTTON", L"XInput", BS_AUTORADIOBUTTON, 594, 36, 120, 22, ID_PAD_XINPUT);
     Make(p, L"STATIC", L"Device", SS_LEFT, 0, 72, 90, 20, 0);
     HWND device = Make(p, L"COMBOBOX", L"XInput controller", CBS_DROPDOWNLIST | WS_TABSTOP, 100, 68, 629, 120, 0);
     SendMessageW(device, CB_ADDSTRING, 0, (LPARAM)L"XInput controller");
@@ -203,11 +224,15 @@ void SettingsControllerCreate(HWND parent, HFONT font) {
     Make(p, L"BUTTON", L"Revert to Default Settings", BS_PUSHBUTTON | WS_TABSTOP, 232, 448, 313, 30, ID_REVERT);
 
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
+    int method = PES_PAD_XINPUT;
+    PesIniLoadPadMethod(PesConfigPath(), &method); /* the saved choice; XInput if the file has none */
+    g_method = method;
     PesPadDefaults(g_pads);
-    {
+    if (g_method == PES_PAD_DIRECTINPUT) {
         int ignored[PES_PAD_SLOTS]; /* the keyboard part belongs to the Keyboard tab */
         PesIniLoadBindings(PesConfigPath(), ignored, g_pads); /* the saved gamepad bindings, if the file has any */
     }
+    ApplyMethod();
     RefreshAll();
     ShowWindow(g_page, SW_HIDE);
 }
@@ -224,6 +249,10 @@ BOOL SettingsControllerFilter(const MSG *msg) {
         return TRUE;
     }
     return FALSE;
+}
+
+int SettingsControllerMethod(void) {
+    return g_method;
 }
 
 void SettingsControllerGet(char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {

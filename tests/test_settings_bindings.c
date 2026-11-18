@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Bindings in the settings file (launcher/settings_ini.c): key. and pad. lines are written and read
 // back, every other line (comments, other keys, lines of inputs the screen does not own) is kept, the
-// analog stick directions get no pad line, and an unbound slot stays unbound.
+// analog stick directions get no pad line, and an unbound slot stays unbound. The pad_input line
+// (XInput or DirectInput) is written, replaced and read back as well.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +55,7 @@ int main(void) {
     assert(strstr(text, "key.cross=X\n") != NULL);             /* slot A = cross, keyboard default X */
     assert(strstr(text, "key.square=A\n") != NULL);            /* slot X = square */
     assert(strstr(text, "key.up=Keypad 8\n") != NULL);
-    assert(strstr(text, "key.l3=\n") != NULL || strstr(text, "key.l3=") != NULL); /* keyboard LS press unbound */
+    assert(strstr(text, "key.l3=\n") != NULL);                 /* keyboard LS press unbound */
     assert(strstr(text, "pad.cross=a\n") != NULL);             /* gamepad A = cross */
     assert(strstr(text, "pad.square=x\n") != NULL);
     assert(strstr(text, "pad.l2=lefttrigger\n") != NULL);
@@ -110,7 +111,23 @@ int main(void) {
     assert(PesIniLoadBindings(path, back, back_pads) == 3);
     for (int s = 0; s < PES_PAD_SLOTS; ++s) assert(back[s] == kept[s]);
 
+    /* The input method: written as one pad_input line, replaced on the next save, read back. */
+    int method = -1;
+    assert(PesIniLoadPadMethod(path, &method) == 0);           /* no line yet */
+    assert(method == -1);
+    assert(PesIniSavePadMethod(path, PES_PAD_DIRECTINPUT) == 1);
+    assert(PesIniLoadPadMethod(path, &method) == 1);
+    assert(method == PES_PAD_DIRECTINPUT);
+    assert(PesIniSavePadMethod(path, PES_PAD_XINPUT) == 1);
+    assert(PesIniLoadPadMethod(path, &method) == 1);
+    assert(method == PES_PAD_XINPUT);
+    text = ReadFile(path);
+    assert(strstr(text, "pad_input=xinput\n") != NULL);
+    assert(strstr(text, "pad_input=directinput") == NULL);     /* replaced, not appended */
+    assert(strstr(text, "key.cross=X\n") != NULL);             /* bindings kept */
+    free(text);
+
     remove(path);
-    printf("PASS: keyboard and gamepad bindings saved and loaded, other settings kept\n");
+    printf("PASS: keyboard and gamepad bindings saved and loaded, other settings kept, input method saved\n");
     return 0;
 }

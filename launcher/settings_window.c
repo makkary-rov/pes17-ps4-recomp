@@ -33,7 +33,8 @@ static void SaveAndClose(HWND hwnd) {
     char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX];
     SettingsKeyboardGet(keys);
     SettingsControllerGet(pads);
-    if (!PesIniSaveBindings(PesConfigPath(), keys, pads)) {
+    if (!PesIniSaveBindings(PesConfigPath(), keys, pads) ||
+        !PesIniSavePadMethod(PesConfigPath(), SettingsControllerMethod())) {
         MessageBoxW(hwnd, L"The settings could not be saved.", L"Settings", MB_OK | MB_ICONERROR);
         return;
     }

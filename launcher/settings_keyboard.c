@@ -107,7 +107,7 @@ static void Column(HWND p, const int slots[12], int chip_x, int button_x) {
         const int s = slots[i];
         const int y = 115 + 33 * i;
         /* The button's icon, centred in its column. */
-        HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 17, y + 1, 24, 24, 0);
+        HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 9, y, 40, 26, 0);
         HBITMAP bmp = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_ICON_BASE + s));
         if (bmp) SendMessageW(icon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmp);
         g_binds[s] = Make(p, L"BUTTON", L"", BS_PUSHBUTTON | WS_TABSTOP, button_x, y, 130, 26, ID_BIND_BASE + s);
@@ -134,10 +134,10 @@ void SettingsKeyboardCreate(HWND parent, HFONT font) {
     /* The gamepad picture, with the two columns of bindings around it. */
     Column(p, kLeft, 21, 86);
     Column(p, kRight, 548, 614);
-    HWND picture = Make(p, L"STATIC", L"", SS_BITMAP | SS_CENTERIMAGE, 232, 109, 313, 311, 0);
+    HWND picture = Make(p, L"STATIC", L"", SS_BITMAP, 258, 109, 260, 325, 0);
     HBITMAP bmp = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_CONTROLLER_KB));
     if (bmp) SendMessageW(picture, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmp);
-    Make(p, L"BUTTON", L"Revert to Default Settings", BS_PUSHBUTTON | WS_TABSTOP, 232, 436, 313, 30, ID_REVERT);
+    Make(p, L"BUTTON", L"Revert to Default Settings", BS_PUSHBUTTON | WS_TABSTOP, 232, 448, 313, 30, ID_REVERT);
 
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
     PesKeyboardDefaults(g_keys);

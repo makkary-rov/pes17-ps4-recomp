@@ -16,6 +16,10 @@ const char *PesConfigPath(void);
  * in order. The file is replaced through a temporary file. Returns 1 on success, 0 on failure. */
 int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
 
+/* The gamepad input method line (pad_input=xinput|directinput). Returns 1 if the file has it. */
+int PesIniSavePadMethod(const char *path, int method);
+int PesIniLoadPadMethod(const char *path, int *method);
+
 /* Reads the bindings. Returns bit 1 if the file had key lines (keys set), bit 2 if it had pad lines
  * (pads set for the bindable slots), 0 if neither (nothing changed, so the caller keeps its defaults). */
 int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
