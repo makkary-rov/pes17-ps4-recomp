@@ -7,6 +7,8 @@ const PesResolution PesResolutions[PES_RESOLUTION_COUNT] = {
     {1920, 1080, "(1920x1080) 16:9"},
 };
 
+const int PesMotionBlurSteps[PES_MOTION_BLUR_COUNT] = {0, 25, 50, 75, 100};
+
 PesDisplaySettings PesDisplayDefaults(void) {
     PesDisplaySettings s;
     s.display_mode = PES_MODE_WINDOWED;
@@ -16,6 +18,9 @@ PesDisplaySettings PesDisplayDefaults(void) {
     s.fps_ingame = 60;
     s.fps_replay = 30;
     s.audio_buffer = 1;
+    s.motion_blur = 0;
+    s.fsr_enabled = 0;
+    s.fsr_preset = PES_FSR_QUALITY;
     return s;
 }
 
@@ -30,6 +35,9 @@ PesDisplaySettings PesDisplayClamp(PesDisplaySettings s) {
     if (s.fps_ingame != 60 && s.fps_ingame != 30) s.fps_ingame = d.fps_ingame;
     if (s.fps_replay != 60 && s.fps_replay != 30) s.fps_replay = d.fps_replay;
     if (!InRange(s.audio_buffer, 1, 8)) s.audio_buffer = d.audio_buffer;
+    if (s.motion_blur != 0 && s.motion_blur != 25 && s.motion_blur != 50 && s.motion_blur != 75 && s.motion_blur != 100) s.motion_blur = d.motion_blur;
+    s.fsr_enabled = s.fsr_enabled ? 1 : 0;
+    if (!InRange(s.fsr_preset, PES_FSR_ULTRA_PERFORMANCE, PES_FSR_QUALITY)) s.fsr_preset = d.fsr_preset;
     return s;
 }
 

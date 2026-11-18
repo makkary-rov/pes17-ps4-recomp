@@ -25,12 +25,14 @@ enum {
     ID_RESOLUTION,
     ID_QUALITY_LOW, ID_QUALITY_MEDIUM, ID_QUALITY_HIGH,
     ID_VSYNC, ID_FPS_INGAME, ID_FPS_REPLAY,
+    ID_MOTION_BLUR, ID_FSR_ON, ID_FSR_PRESET,
 };
 
 static const wchar_t *kPageClass = L"PesSettingsPage";
 static HWND g_page;
 static int g_content_height;
 static HWND g_mode[3], g_resolution, g_quality[3], g_vsync, g_fps_ingame, g_fps_replay;
+static HWND g_motion_blur, g_fsr_on, g_fsr_preset;
 
 static HWND Make(HWND parent, const wchar_t *cls, const wchar_t *text, DWORD style, int x, int y, int w, int h, int id) {
     HWND c = CreateWindowExW(0, cls, text, WS_CHILD | WS_VISIBLE | style, x, y, w, h, parent,
@@ -149,7 +151,7 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     g_quality[2] = Make(p, L"BUTTON", L"High", BS_AUTORADIOBUTTON | WS_TABSTOP, 516, 244, 200, 24, ID_QUALITY_HIGH);
 
     /* Vertical sync and frame rates (PES 2018 standard). The group runs down to the page's bottom border. */
-    GroupBox(p, L"Vertical Sync and Frame Rate", 16, 316, 718, PAGE_H - 316 - 4);
+    GroupBox(p, L"Vertical Sync and Frame Rate", 16, 316, 718, 134);
     g_vsync = Make(p, L"BUTTON", L"Vertical sync", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 346, 300, 24, ID_VSYNC);
     Make(p, L"STATIC", L"Frame rate in game", SS_LEFT, 40, 380, 200, 20, 0);
     g_fps_ingame = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 378, 120, 120, ID_FPS_INGAME);
@@ -159,6 +161,25 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"30");
     SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"30");
     SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"60");
+
+    /* Motion blur: a fixed list, OFF to FULL (saved as a percentage). */
+    GroupBox(p, L"Motion Blur", 16, 462, 718, 84);
+    g_motion_blur = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 40, 492, 200, 160, ID_MOTION_BLUR);
+    SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"OFF");
+    SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"25%");
+    SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"50%");
+    SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"75%");
+    SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"FULL");
+
+    /* FSR 3.1: an on/off toggle and the quality mode (Ultra Performance to Quality). */
+    GroupBox(p, L"FSR 3.1", 16, 558, 718, 110);
+    g_fsr_on = Make(p, L"BUTTON", L"Enable FSR 3.1", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 588, 300, 24, ID_FSR_ON);
+    Make(p, L"STATIC", L"Mode", SS_LEFT, 40, 622, 200, 20, 0);
+    g_fsr_preset = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 620, 200, 160, ID_FSR_PRESET);
+    SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Ultra Performance");
+    SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Performance");
+    SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Balanced");
+    SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Quality");
 
     /* Every control on the page takes the window font. */
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
@@ -179,6 +200,10 @@ void SettingsDisplaySetValues(PesDisplaySettings s) {
     SendMessageW(g_vsync, BM_SETCHECK, s.vsync ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_fps_ingame, CB_SETCURSEL, s.fps_ingame == 60 ? 0 : 1, 0);
     SendMessageW(g_fps_replay, CB_SETCURSEL, s.fps_replay == 30 ? 0 : 1, 0);
+    static const int blur_index[PES_MOTION_BLUR_COUNT] = {0, 1, 2, 3, 4};
+    for (int i = 0; i < PES_MOTION_BLUR_COUNT; ++i) if (PesMotionBlurSteps[i] == s.motion_blur) SendMessageW(g_motion_blur, CB_SETCURSEL, blur_index[i], 0);
+    SendMessageW(g_fsr_on, BM_SETCHECK, s.fsr_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(g_fsr_preset, CB_SETCURSEL, s.fsr_preset, 0);
 }
 
 /* Reads the controls into a model (the caller clamps and saves it). */
@@ -190,5 +215,9 @@ PesDisplaySettings SettingsDisplayGetValues(void) {
     s.vsync = SendMessageW(g_vsync, BM_GETCHECK, 0, 0) == BST_CHECKED;
     s.fps_ingame = SendMessageW(g_fps_ingame, CB_GETCURSEL, 0, 0) == 0 ? 60 : 30;
     s.fps_replay = SendMessageW(g_fps_replay, CB_GETCURSEL, 0, 0) == 0 ? 30 : 60;
+    const int blur = (int)SendMessageW(g_motion_blur, CB_GETCURSEL, 0, 0);
+    s.motion_blur = blur >= 0 && blur < PES_MOTION_BLUR_COUNT ? PesMotionBlurSteps[blur] : 0;
+    s.fsr_enabled = SendMessageW(g_fsr_on, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    s.fsr_preset = (int)SendMessageW(g_fsr_preset, CB_GETCURSEL, 0, 0);
     return PesDisplayClamp(s);
 }

@@ -19,9 +19,10 @@ int main(void) {
     assert(PesResolutions[d.resolution].width == 1920);
     assert(d.quality == PES_QUALITY_HIGH && d.vsync == 1 && d.fps_ingame == 60 && d.fps_replay == 30);
     assert(d.audio_buffer == 1);
+    assert(d.motion_blur == 0 && d.fsr_enabled == 0 && d.fsr_preset == PES_FSR_QUALITY);
 
     /* Clamping: bad values fall back to the default for that field; good values stay. */
-    PesDisplaySettings bad = {9, 99, 7, 5, 45, 12, 0};
+    PesDisplaySettings bad = {9, 99, 7, 5, 45, 12, 0, 40, 7, 9};
     PesDisplaySettings c = PesDisplayClamp(bad);
     assert(c.display_mode == PES_MODE_WINDOWED);
     assert(c.resolution == d.resolution);
@@ -29,10 +30,12 @@ int main(void) {
     assert(c.vsync == 1);
     assert(c.fps_ingame == 60 && c.fps_replay == 30);
     assert(c.audio_buffer == 1);
-    PesDisplaySettings good = {PES_MODE_FULLSCREEN, 0, PES_QUALITY_LOW, 0, 30, 60, 8};
+    assert(c.motion_blur == 0 && c.fsr_preset == PES_FSR_QUALITY && c.fsr_enabled == 1);
+    PesDisplaySettings good = {PES_MODE_FULLSCREEN, 0, PES_QUALITY_LOW, 0, 30, 60, 8, 75, 1, PES_FSR_BALANCED};
     PesDisplaySettings kept = PesDisplayClamp(good);
     assert(memcmp(&kept, &good, sizeof(good)) == 0);
 
+    assert(PesMotionBlurSteps[4] == 100);
     /* Lookups. */
     assert(PesResolutionIndex(800, 600) == 1);
     assert(PesResolutionIndex(2560, 1440) == -1);

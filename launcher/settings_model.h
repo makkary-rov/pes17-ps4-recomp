@@ -17,7 +17,15 @@ typedef struct {
     int fps_ingame;      /* 60 or 30 */
     int fps_replay;      /* 60 or 30 */
     int audio_buffer;    /* 1..8: saved only, no effect yet */
+    int motion_blur;     /* percent: 0 (OFF), 25, 50, 75 or 100 (FULL) */
+    int fsr_enabled;     /* FSR 3.1 upscaler on (1) or off (0) */
+    int fsr_preset;      /* enum PesFsrPreset */
 } PesDisplaySettings;
+
+/* FSR 3.1 quality modes, in the order the settings screen lists them. */
+enum PesFsrPreset { PES_FSR_ULTRA_PERFORMANCE = 0, PES_FSR_PERFORMANCE = 1, PES_FSR_BALANCED = 2, PES_FSR_QUALITY = 3 };
+#define PES_MOTION_BLUR_COUNT 5
+extern const int PesMotionBlurSteps[PES_MOTION_BLUR_COUNT];
 
 /* The fixed display list (user decision): 640x480 up to 1920x1080, in size order. */
 typedef struct { int width, height; const char *label; } PesResolution;
