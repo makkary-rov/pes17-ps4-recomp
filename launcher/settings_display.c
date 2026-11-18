@@ -182,7 +182,7 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     g_quality[2] = Make(p, L"BUTTON", L"High", BS_AUTORADIOBUTTON | WS_TABSTOP, 516, 244, 200, 24, ID_QUALITY_HIGH);
 
     /* Other settings: vertical sync, frame rates and motion blur (the PS4 native values). */
-    GroupBox(p, L"Other settings", 16, 316, 718, 196);
+    GroupBox(p, L"Other settings", 16, 316, 718, 240);
     g_vsync = Make(p, L"BUTTON", L"Vertical sync", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 346, 300, 24, ID_VSYNC);
     Make(p, L"STATIC", L"Frame rate in game", SS_LEFT, 40, 380, 200, 20, 0);
     g_fps_ingame = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 378, 120, 120, ID_FPS_INGAME);
@@ -200,11 +200,10 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"75%");
     SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"FULL");
 
-    /* FSR 3.1: an on/off toggle and the quality mode (Ultra Performance to Quality). */
-    GroupBox(p, L"FSR 3.1", 16, 528, 718, 110);
-    g_fsr_on = Make(p, L"BUTTON", L"Enable FSR 3.1", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 558, 300, 24, ID_FSR_ON);
-    Make(p, L"STATIC", L"Mode", SS_LEFT, 40, 592, 200, 20, 0);
-    g_fsr_preset = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 590, 200, 160, ID_FSR_PRESET);
+    /* FSR 3.1 (in the same group): an on/off toggle and the quality mode (Ultra Performance to Quality). */
+    g_fsr_on = Make(p, L"BUTTON", L"Enable FSR 3.1", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 494, 300, 24, ID_FSR_ON);
+    Make(p, L"STATIC", L"FSR 3.1 mode", SS_LEFT, 40, 528, 200, 20, 0);
+    g_fsr_preset = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 526, 200, 160, ID_FSR_PRESET);
     SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Ultra Performance");
     SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Performance");
     SendMessageW(g_fsr_preset, CB_ADDSTRING, 0, (LPARAM)L"Balanced");
