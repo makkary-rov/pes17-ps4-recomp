@@ -121,7 +121,7 @@ try {
         }
         # M6 ExitWait1: the title scene mounts SYSTEM00000000 only after MenuTitle ExitWait1 and ExitWait2 return 1
         # (old-tree logs, knowledge.md 2026-11-05); the read-only observer (G-44) is not wired to its object yet.
-        if ($mount) { Set-Crit 'M6' 'PASS' 'ExitWait1 returned (inferred: the system save mount follows ExitWait1 and ExitWait2 in the title scene)' $null }
+        if ($mount) { Set-Crit 'M6' 'EXPLAIN' 'ExitWait1 not observed directly (inferred: the system save mount follows ExitWait1 and ExitWait2 in the title scene)' $null }
         else { Set-Crit 'M6' 'EXPLAIN' 'ExitWait1 not shown: the system save mount was not reached' $null }
     } else {
         foreach ($id in @('M2', 'M3', 'M4', 'M5', 'M6')) { Set-Crit $id 'FAIL' 'not measured: the run could not start' }

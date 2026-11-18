@@ -24,3 +24,10 @@ and starts empty: no patch is applied until its record above is approved and a t
 `pes_observer_sample` is the read-only state observer (`PES_TRACE=title`); it cannot write guest memory.
 Trace subsystems: `PES_TRACE=loader,file,gpu,title,kernel,patch` (default off, read once at startup,
 per-subsystem cap `PES_TRACE_CAP`, output `PES_TRACE_FILE`); `-DPES_NO_TRACE` compiles it out.
+
+## Mapping rule (not a patch): PT_SCE_RELRO is writable
+
+`scripts/prepare.py` `segment_flags()` maps PT_SCE_RELRO load segments read-write although their
+header says read-only. No guest byte changes. Evidence: a JobGraph worker wrote into the segment at run
+time and faulted while it was mapped read-only; the console therefore maps it writable. Test:
+`tests/test_segment_flags.py`.
