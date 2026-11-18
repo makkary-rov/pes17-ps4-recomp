@@ -452,11 +452,11 @@ void TextureCache::DumpImagesAt(VAddr address, const char* dir) {
                     static_cast<u32>(image.info.tile_mode), static_cast<u32>(image.flags),
                     image.info.resources.layers, image.info.resources.levels,
                     image.info.props.is_depth ? "depth" : "color");
-        if (image.info.props.is_block) {
-            continue;
-        }
-        const u32 bytes_per_pixel = image.info.props.is_depth ? 4 : image.info.num_bits / 8;
-        const u64 size = u64(width) * height * bytes_per_pixel;
+        // Block-compressed images are written as their blocks (num_bits is per 4x4 block).
+        const u64 size = image.info.props.is_block
+                             ? u64((width + 3) / 4) * ((height + 3) / 4) * (image.info.num_bits / 8)
+                             : u64(width) * height *
+                                   (image.info.props.is_depth ? 4 : image.info.num_bits / 8);
         const auto download = runtime.GetStagingPool().Request(size, MemoryType::HostCached, 16);
         const vk::BufferImageCopy copy = {
             .bufferOffset = download.offset,
