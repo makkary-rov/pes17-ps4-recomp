@@ -442,8 +442,14 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
             instance_.IsAmdShaderExplicitVertexParameterSupported(),
         .supports_fragment_shader_barycentric = instance_.IsFragmentShaderBarycentricSupported(),
         .supports_shader_subgroup_clock = instance_.IsShaderSubgroupClockSupported(),
-        .needs_manual_interpolation = instance.IsFragmentShaderBarycentricSupported() &&
-                                      instance.GetDriverID() == vk::DriverId::eNvidiaProprietary,
+        // pes: PES_MANUAL_INTERP=0/1 overrides (A/B diagnosis of per-pixel artifacts).
+        .needs_manual_interpolation = [&] {
+            if (const char* env = std::getenv("PES_MANUAL_INTERP")) {
+                return env[0] == '1';
+            }
+            return instance.IsFragmentShaderBarycentricSupported() &&
+                   instance.GetDriverID() == vk::DriverId::eNvidiaProprietary;
+        }(),
         // pes: older NVIDIA (Pascal) has no barycentrics; PES_INTERP_INT_FIX=0/1 overrides.
         .needs_integer_interpolation_fix = [&] {
             if (const char* env = std::getenv("PES_INTERP_INT_FIX")) {
