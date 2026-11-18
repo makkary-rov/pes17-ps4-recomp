@@ -17,11 +17,13 @@
 #define ID_TABS 100
 #define ID_OK 101
 #define ID_CANCEL 102
+#define IDB_BACKGROUND 201  /* assets/background.bmp, 800 x 716: the window client area */
 
 static const wchar_t *kClassName = L"Pes17SettingsWindow";
 static const wchar_t *kTabNames[] = {L"Display", L"Keyboard", L"Controller", L"Audio", L"Online"};
 static const int kTabCount = (int)(sizeof(kTabNames) / sizeof(kTabNames[0]));
 static HWND g_tabs, g_ok, g_cancel;
+static HBITMAP g_background;
 
 /* Saves what the tabs hold (the keyboard bindings for now) and closes the window. A failed save keeps
  * the window open, so nothing is lost silently. */
@@ -80,8 +82,22 @@ static void CreateControls(HWND hwnd) {
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
+        g_background = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_BACKGROUND));
         CreateControls(hwnd);
         return 0;
+    case WM_ERASEBKGND: {
+        /* The window background is the artwork, drawn once per repaint behind the controls. */
+        HDC dc = (HDC)wp;
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        if (!g_background) return DefWindowProcW(hwnd, msg, wp, lp);
+        HDC mem = CreateCompatibleDC(dc);
+        HGDIOBJ old = SelectObject(mem, g_background);
+        BitBlt(dc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, mem, 0, 0, SRCCOPY);
+        SelectObject(mem, old);
+        DeleteDC(mem);
+        return 1;
+    }
     case WM_COMMAND:
         if (LOWORD(wp) == ID_CANCEL) {
             DestroyWindow(hwnd);
@@ -98,6 +114,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_DESTROY:
+        if (g_background) DeleteObject(g_background);
         PostQuitMessage(0);
         return 0;
     }
