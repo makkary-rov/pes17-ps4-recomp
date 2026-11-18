@@ -7,8 +7,8 @@
     Needs out\verify\m2b\boot-linked.bin (verify_M2b.ps1). Starts the game; YOU start a match from the menu with
     the keyboard (any quick exhibition match). The game runs until -Seconds (default 300) or until you close it.
     Writes out\verify\M5-result.json and out\verify\M5-run.log. Criteria:
-    E1 observer reported mode=15 sub=2; E2 the match stays in mode 15 for at least -ReferenceSeconds after kickoff;
-    E3 no stop or fault before that sample; E4 the user's sign-off (-SignOff) is recorded.
+    E1 observer reported mode=15 sub=2; E2 the longest continuous live stretch (mode 15 sub 2) is at least -ReferenceSeconds;
+    E3 no stop or fault, and the script (not a crash or close) ended the run; E4 the user's sign-off (-SignOff) is recorded.
     -DumpAt 120,180 asks the runtime for a thread dump (every thread's guest call chain) at those seconds.
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File verify\verify_M5.ps1 -Game <path to your game folder> -SignOff "played a live match"
@@ -103,19 +103,21 @@ try {
         elseif ($samples.Count -eq 0) { Set-Crit 'E1' 'FAIL' 'no observer line (the match controller was never created)' ([ordered]@{ exit_code = $code }) }
         else { Set-Crit 'E1' 'FAIL' 'observer never reported mode=15 sub=2 (no live match)' ([ordered]@{ mode_sub_seen = $modes }) }
 
-        # E2 counts live-match time from kickoff (first mode-15 sample), not from launch.
-        $live_for = 0.0
-        if ($inMatch.Count -gt 0) {
-            $first = ($inMatch | Measure-Object -Property t -Minimum).Minimum
-            $last = ($inMatch | Measure-Object -Property t -Maximum).Maximum
-            $live_for = [math]::Round($last - $first, 1)
+        # E2: the longest continuous stretch of mode 15 sub 2 (live match) samples; any other sample ends a stretch.
+        $live_for = 0.0; $start = $null; $prev = $null
+        foreach ($s in ($samples | Sort-Object t)) {
+            if ($s.mode -eq 15 -and $s.sub -eq 2) { if ($null -eq $start) { $start = $s.t }; $prev = $s.t }
+            else { if ($null -ne $start) { $live_for = [math]::Max($live_for, $prev - $start) }; $start = $null }
         }
-        if ($live_for -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('match stayed in mode 15 for ' + $live_for + ' s after kickoff >= reference ' + $ReferenceSeconds + ' s') $null }
-        else { Set-Crit 'E2' 'FAIL' ('match stayed in mode 15 for ' + $live_for + ' s after kickoff < reference ' + $ReferenceSeconds + ' s') $null }
+        if ($null -ne $start) { $live_for = [math]::Max($live_for, $prev - $start) }
+        $live_for = [math]::Round($live_for, 1)
+        if ($live_for -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('longest continuous live stretch (mode 15 sub 2) ' + $live_for + ' s >= reference ' + $ReferenceSeconds + ' s') $null }
+        else { Set-Crit 'E2' 'FAIL' ('longest continuous live stretch (mode 15 sub 2) ' + $live_for + ' s < reference ' + $ReferenceSeconds + ' s') $null }
 
         $stop = $lines | Where-Object { $_ -like 'STOP:*' } | Select-Object -First 1
         $fault = $lines | Where-Object { $_ -match '^(Guest|Host) fault ' } | Select-Object -First 1
-        if (-not $stop -and -not $fault) { Set-Crit 'E3' 'PASS' 'no stop or fault in the run' ([ordered]@{ exit_code = $code; stopped_by_script = $killed }) }
+        if (-not $stop -and -not $fault -and -not $killed) { Set-Crit 'E3' 'EXPLAIN' ('the process ended by itself (exit code ' + $code + '; closed by the user or a silent exit)') ([ordered]@{ exit_code = $code; stopped_by_script = $killed }) }
+        elseif (-not $stop -and -not $fault) { Set-Crit 'E3' 'PASS' 'no stop or fault in the run' ([ordered]@{ exit_code = $code; stopped_by_script = $killed }) }
         else { Set-Crit 'E3' 'EXPLAIN' 'the run ended at a stop or fault (see M5-run.log; the post-kickoff faults are M6 work)' ([ordered]@{ first_stop = $stop; first_fault = $fault; exit_code = $code }) }
     } else {
         foreach ($id in @('E2', 'E3')) { Set-Crit $id 'FAIL' 'not measured: the run could not start' }

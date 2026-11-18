@@ -12,5 +12,7 @@
 #define PES_OBSERVER_CONTROLLER_GLOBAL 0x4996218u  /* image offset of the controller pointer */
 #define PES_OBSERVER_MODE_OFFSET 0xb8u               /* controller byte: mode (15 = match, 16/18 = kickoff path) */
 #define PES_OBSERVER_SUB_OFFSET 0xb9u                /* controller byte: sub-state */
+/* The observer reads mode and sub-state in one 2-byte read: they must be adjacent. */
+_Static_assert(PES_OBSERVER_SUB_OFFSET == PES_OBSERVER_MODE_OFFSET + 1, "observer reads mode and sub together");
 
 #endif
