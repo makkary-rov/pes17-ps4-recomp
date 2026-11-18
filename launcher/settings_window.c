@@ -13,6 +13,7 @@
 #include "settings_ini.h"
 #include "settings_controller.h"
 #include "settings_audio.h"
+#include "settings_online.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -82,10 +83,12 @@ static void CreateControls(HWND hwnd) {
     SettingsKeyboardCreate(hwnd, font);
     SettingsControllerCreate(hwnd, font);
     SettingsAudioCreate(hwnd, font);
+    SettingsOnlineCreate(hwnd, font);
     SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
     SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
     SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
     SettingsAudioShow(TabCtrl_GetCurSel(g_tabs) == 3);
+    SettingsOnlineShow(TabCtrl_GetCurSel(g_tabs) == 4);
     LayoutControls(hwnd);
 }
 
@@ -122,6 +125,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
             SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
             SettingsAudioShow(TabCtrl_GetCurSel(g_tabs) == 3);
+            SettingsOnlineShow(TabCtrl_GetCurSel(g_tabs) == 4);
         }
         return 0;
     }
