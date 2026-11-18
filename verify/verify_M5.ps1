@@ -16,7 +16,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Game,
     [int]$Seconds = 300,
     [double]$ReferenceSeconds = 109.4,
-    [string]$SignOff = ''
+    [string]$SignOff = '',
+    [switch]$FileTrace
 )
 
 $ErrorActionPreference = 'Continue'
@@ -63,6 +64,7 @@ try {
         $psi.RedirectStandardInput = $true
         $psi.WorkingDirectory = $Root
         $psi.EnvironmentVariables['PATH'] = (Join-Path $MsysRoot 'clang64\bin') + ';' + $env:PATH
+        if ($FileTrace) { $psi.EnvironmentVariables['PES_FILE_TRACE'] = '1' }  # every open/read/stat goes to the log
         $p = [System.Diagnostics.Process]::Start($psi)
         $p.StandardInput.Close()
         $so = $p.StandardOutput.ReadToEndAsync()
