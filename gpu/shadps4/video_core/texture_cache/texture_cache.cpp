@@ -82,6 +82,10 @@ void TraceOverlap(const ImageInfo& requested, Binding binding, ImageId id, const
         cached.resources.layers, static_cast<unsigned long long>(u64(cached.type)),
         candidate ? unsigned(candidate->binding.is_bound) : 0u,
         candidate ? unsigned(candidate->binding.is_target) : 0u, mip, slice);
+    // Guest tiling of both images (array mode, tile mode, alternate tiling).
+    std::printf("TextureDiag tiling: req array=%u tile=%u alt=%u cand array=%u tile=%u alt=%u\n",
+                u32(requested.array_mode), u32(requested.tile_mode), u32(requested.alt_tile),
+                u32(cached.array_mode), u32(cached.tile_mode), u32(cached.alt_tile));
     std::fflush(stdout);
 }
 
