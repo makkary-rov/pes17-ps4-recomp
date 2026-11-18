@@ -18,7 +18,7 @@ PesDisplaySettings PesDisplayDefaults(void) {
     s.fps_ingame = 60;
     s.fps_replay = 30;
     s.audio_buffer = 1;
-    s.motion_blur = 0;
+    s.motion_blur = 100; /* FULL: the PS4 native setting */
     s.fsr_enabled = 0;
     s.fsr_preset = PES_FSR_QUALITY;
     return s;

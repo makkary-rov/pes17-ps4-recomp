@@ -97,6 +97,12 @@ static LRESULT CALLBACK PageProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         ScrollWindowEx(hwnd, 0, dy, NULL, NULL, NULL, NULL, SW_INVALIDATE | SW_ERASE | SW_SCROLLCHILDREN);
         return 0;
     }
+    case WM_COMMAND:
+        /* The FSR mode is only usable while FSR 3.1 is on. */
+        if (LOWORD(wp) == ID_FSR_ON && HIWORD(wp) == BN_CLICKED) {
+            EnableWindow(g_fsr_preset, SendMessageW(g_fsr_on, BM_GETCHECK, 0, 0) == BST_CHECKED);
+        }
+        return 0;
     case WM_MOUSEWHEEL: {
         const int notches = GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA;
         for (int i = 0; i < abs(notches); ++i) {
@@ -204,6 +210,7 @@ void SettingsDisplaySetValues(PesDisplaySettings s) {
     for (int i = 0; i < PES_MOTION_BLUR_COUNT; ++i) if (PesMotionBlurSteps[i] == s.motion_blur) SendMessageW(g_motion_blur, CB_SETCURSEL, blur_index[i], 0);
     SendMessageW(g_fsr_on, BM_SETCHECK, s.fsr_enabled ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_fsr_preset, CB_SETCURSEL, s.fsr_preset, 0);
+    EnableWindow(g_fsr_preset, s.fsr_enabled ? TRUE : FALSE);
 }
 
 /* Reads the controls into a model (the caller clamps and saves it). */
