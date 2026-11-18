@@ -229,6 +229,7 @@ static ABI int32_t audio_volume(int32_t handle, int32_t flags, const int32_t *vo
     for (int c=0;c<8;++c) if (flags & (1<<c)) {
         if (volume[c]<0 || volume[c]>VOLUME_0DB) { host_unlock(&p->lock); return ERR_INVALID_VOLUME; }
         p->volume[c]=volume[c];
+        if (p->stats) printf("Audio volume port %d ch %d = %d (0 dB = %d)\n",(int)(p-ports),c,volume[c],VOLUME_0DB);
     }
     host_unlock(&p->lock);
     return 0;
