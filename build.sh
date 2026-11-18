@@ -110,6 +110,8 @@ if [[ ${1:-} == --test ]]; then
     out/aniso-stage-test
     "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_audio_mix.c -o out/audio-mix-test -lm
     out/audio-mix-test
+    "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -Ilauncher tests/test_settings_model.c launcher/settings_model.c -o out/settings-model-test
+    out/settings-model-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_display_modes.cpp gpu/shim/pes_settings.cpp -o out/display-modes-test
     (cd out && ./display-modes-test)
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings_keys.cpp gpu/shim/pes_settings.cpp -o out/settings-keys-test
@@ -117,7 +119,7 @@ if [[ ${1:-} == --test ]]; then
     if [[ -n $windows ]]; then
         # The settings window shell (launcher/): Windows only, with its visual-style manifest.
         windres --input launcher/pes17settings.rc --output out/pes17settings.res.o -O coff
-        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32
+        "$CC" -municode -O2 -Wall -Wextra -Werror -mwindows launcher/settings_window.c launcher/settings_display.c launcher/settings_model.c out/pes17settings.res.o -o out/pes17settings.exe -lcomctl32 -luser32 -lgdi32 -lkernel32
     fi
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)

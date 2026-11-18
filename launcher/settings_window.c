@@ -8,6 +8,7 @@
 #include <commctrl.h>
 #include <stdio.h>
 #include <string.h>
+#include "settings_display.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -55,6 +56,8 @@ static void CreateControls(HWND hwnd) {
     SendMessageW(g_tabs, WM_SETFONT, (WPARAM)font, TRUE);
     SendMessageW(g_ok, WM_SETFONT, (WPARAM)font, TRUE);
     SendMessageW(g_cancel, WM_SETFONT, (WPARAM)font, TRUE);
+    SettingsDisplayCreate(hwnd, font);
+    SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
     LayoutControls(hwnd);
 }
 
@@ -74,7 +77,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_NOTIFY: {
         NMHDR *nm = (NMHDR *)lp;
         if (nm->idFrom == ID_TABS && nm->code == TCN_SELCHANGE) {
-            /* Tab pages are shown here in the next steps. */
+            SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
         }
         return 0;
     }
