@@ -7,7 +7,7 @@
     Needs out\verify\m2b\boot-linked.bin (verify_M2b.ps1). Starts the game; YOU start a match from the menu with
     the keyboard (any quick exhibition match). The game runs until -Seconds (default 300) or until you close it.
     Writes out\verify\M5-result.json and out\verify\M5-run.log. Criteria:
-    E1 observer reported mode=15 sub=2; E2 the last observer sample in mode 15 is at or after -ReferenceSeconds;
+    E1 observer reported mode=15 sub=2; E2 the match stays in mode 15 for at least -ReferenceSeconds after kickoff;
     E3 no stop or fault before that sample; E4 the user's sign-off (-SignOff) is recorded.
     -DumpAt 120,180 asks the runtime for a thread dump (every thread's guest call chain) at those seconds.
 .EXAMPLE
@@ -103,10 +103,15 @@ try {
         elseif ($samples.Count -eq 0) { Set-Crit 'E1' 'FAIL' 'no observer line (the match controller was never created)' ([ordered]@{ exit_code = $code }) }
         else { Set-Crit 'E1' 'FAIL' 'observer never reported mode=15 sub=2 (no live match)' ([ordered]@{ mode_sub_seen = $modes }) }
 
-        $lastMatch = 0.0
-        if ($inMatch.Count -gt 0) { $lastMatch = ($inMatch | Measure-Object -Property t -Maximum).Maximum }
-        if ($lastMatch -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('last mode-15 sample at t=' + $lastMatch + ' s >= reference ' + $ReferenceSeconds + ' s') $null }
-        else { Set-Crit 'E2' 'FAIL' ('last mode-15 sample at t=' + $lastMatch + ' s < reference ' + $ReferenceSeconds + ' s') $null }
+        # E2 counts live-match time from kickoff (first mode-15 sample), not from launch.
+        $live_for = 0.0
+        if ($inMatch.Count -gt 0) {
+            $first = ($inMatch | Measure-Object -Property t -Minimum).Minimum
+            $last = ($inMatch | Measure-Object -Property t -Maximum).Maximum
+            $live_for = [math]::Round($last - $first, 1)
+        }
+        if ($live_for -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('match stayed in mode 15 for ' + $live_for + ' s after kickoff >= reference ' + $ReferenceSeconds + ' s') $null }
+        else { Set-Crit 'E2' 'FAIL' ('match stayed in mode 15 for ' + $live_for + ' s after kickoff < reference ' + $ReferenceSeconds + ' s') $null }
 
         $stop = $lines | Where-Object { $_ -like 'STOP:*' } | Select-Object -First 1
         $fault = $lines | Where-Object { $_ -match '^(Guest|Host) fault ' } | Select-Object -First 1
