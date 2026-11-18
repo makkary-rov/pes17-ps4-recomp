@@ -108,6 +108,8 @@ if [[ ${1:-} == --test ]]; then
     out/title-infra-notrace-test
     "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_aniso_stage.cpp -o out/aniso-stage-test
     out/aniso-stage-test
+    "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_audio_mix.c -o out/audio-mix-test -lm
+    out/audio-mix-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)
     if [[ -n $windows ]]; then
