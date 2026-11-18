@@ -73,17 +73,20 @@ try {
         $se = $p.StandardError.ReadToEndAsync()
         $killed = $false
         $t0 = Get-Date
+        $DumpNotes = New-Object System.Collections.ArrayList
         foreach ($at in ($DumpAt | Sort-Object)) {  # the runtime's dump thread waits on Local\pes-dump-<pid>
             if ($at -ge $Seconds) { continue }
             $wait = $at - ((Get-Date) - $t0).TotalSeconds
             if ($wait -gt 0 -and $p.WaitForExit([int]($wait * 1000))) { break }
-            try { $ev = [System.Threading.EventWaitHandle]::OpenExisting('Local\pes-dump-' + $p.Id); [void]$ev.Set(); $ev.Dispose() } catch { }
+            $note = 'DumpAt ' + $at + ' s: '
+            try { $ev = [System.Threading.EventWaitHandle]::OpenExisting('Local\pes-dump-' + $p.Id); $note += 'set ' + $ev.Set(); $ev.Dispose() } catch { $note += 'failed: ' + $_.Exception.Message }
+            [void]$DumpNotes.Add($note)
         }
         $left = [math]::Max(0, $Seconds - ((Get-Date) - $t0).TotalSeconds)
         if (-not $p.HasExited -and -not $p.WaitForExit([int]($left * 1000))) { try { $p.Kill(); $killed = $true } catch { } ; $p.WaitForExit(5000) | Out-Null }
         $code = $null
         if ($p.HasExited) { $code = $p.ExitCode }
-        $Text = $so.Result + "`n" + $se.Result
+        $Text = $so.Result + "`n" + $se.Result + "`n" + ($DumpNotes -join "`n")
         [System.IO.File]::WriteAllText((Join-Path $V 'M5-run.log'), $Text, $Utf8)
         $lines = $Text -split "`r?`n"
 
