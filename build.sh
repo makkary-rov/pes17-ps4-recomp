@@ -108,6 +108,4 @@ if [[ ${1:-} == --test ]]; then
     out/title-infra-notrace-test
     "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_aniso_stage.cpp -o out/aniso-stage-test
     out/aniso-stage-test
-    "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_tiling_alias.cpp -o out/tiling-alias-test
-    out/tiling-alias-test
 fi

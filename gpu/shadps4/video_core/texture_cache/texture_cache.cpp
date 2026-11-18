@@ -6,7 +6,6 @@
 
 #include "pes_toggles.h"
 #include "pes_free_check.h"
-#include "pes_tiling_alias.h"
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
@@ -683,20 +682,9 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
                 cached.info.num_bits * cached.info.num_samples) {
             return reject("different block dimensions or sample footprint");
         }
-        const Pes::GuestTiling requested_tiling{u32(image_info.array_mode),
-                                                u32(image_info.tile_mode), image_info.alt_tile};
-        const Pes::GuestTiling cached_tiling{u32(cached.info.array_mode),
-                                             u32(cached.info.tile_mode), cached.info.alt_tile};
-        if (!Pes::SameGuestTiling(requested_tiling, cached_tiling)) {
-            // pes: same memory, other layout (pes_tiling_alias.h): store the GPU's drawing in
-            // its own layout first, so the new image is built from the bytes the console has.
-            if (Pes::WriteBackBeforeRetiledView(requested_tiling, cached_tiling,
-                                                True(cached.flags & ImageFlagBits::GpuModified))) {
-                const bool stored = WriteBackTiledImage(cache_image_id);
-                TraceOverlap(image_info, binding, cache_image_id, &cached,
-                             stored ? "writeback" : "writeback_failed",
-                             "different guest tiling layout");
-            }
+        if (image_info.array_mode != cached.info.array_mode ||
+            image_info.tile_mode != cached.info.tile_mode ||
+            image_info.alt_tile != cached.info.alt_tile) {
             return reject("different guest tiling layout");
         }
         if (image_info.type != cached.info.type) {
@@ -918,26 +906,6 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
     // Create and register a new image
     if (!image_id) {
         view_mip = view_slice = -1;
-        // pes: the new image is uploaded from guest memory; GPU-written images over the same
-        // range (another format or layout) store their bytes there first (pes_tiling_alias.h).
-        const bool new_image_is_read =
-            desc.type == BindingType::Texture || desc.type == BindingType::VideoOut;
-        for (const auto cache_id : image_ids) {
-            Image& overlap = slot_images[cache_id];
-            if (!Pes::WriteBackOverlapBeforeUpload(
-                    new_image_is_read, True(overlap.flags & ImageFlagBits::GpuModified)) ||
-                overlap.info.pixel_format == vk::Format::eUndefined) {
-                continue;
-            }
-            bool stored = true;
-            if (overlap.info.props.is_tiled) {
-                stored = WriteBackTiledImage(cache_id);
-            } else {
-                DownloadImageMemory(cache_id, true);
-            }
-            TraceOverlap(info, desc.type, cache_id, &overlap,
-                         stored ? "writeback" : "writeback_failed", "GPU-written overlap");
-        }
         TraceOverlap(info, desc.type, {}, nullptr, "create", "no candidate covers requested view");
         image_id = slot_images.insert(instance, runtime, slot_image_views, info);
         RegisterImage(image_id);
