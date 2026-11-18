@@ -419,7 +419,8 @@ void Menu() {
 
     ImGui::SeparatorText(PesSettings::MenuText("Output resolution", "Разрешение вывода"));
     static const char* outputs[] = {"1280 x 720", "1920 x 1080", "2560 x 1440", "3840 x 2160",
-        "2560 x 1080", "3440 x 1440", "3840 x 1600", "3840 x 1080", "5120 x 1440", "5120 x 2160"};
+        "2560 x 1080", "3440 x 1440", "3840 x 1600", "3840 x 1080", "5120 x 1440", "5120 x 2160",
+        "640 x 480", "800 x 600", "1024 x 768", "1366 x 768", "1600 x 900"};
     static_assert(std::size(outputs)==PesSettings::OutputCount);
     int output = s.output_res;
     if (ImGui::BeginCombo(PesSettings::MenuText("Output resolution", "Разрешение вывода"),

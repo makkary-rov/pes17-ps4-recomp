@@ -47,9 +47,13 @@ inline constexpr Effect Effects[] = {
 };
 inline constexpr int EffectCount = int(sizeof(Effects) / sizeof(Effects[0]));
 /// Live output resolutions: the upscaler's output and the UI host targets.
-inline constexpr int OutputWidths[] = {1280,1920,2560,3840,2560,3440,3840,3840,5120,5120};
-inline constexpr int OutputHeights[] = {720,1080,1440,2160,1080,1440,1600,1080,1440,2160};
-inline constexpr int OutputCount = 10;
+inline constexpr int OutputWidths[] = {1280,1920,2560,3840,2560,3440,3840,3840,5120,5120,640,800,1024,1366,1600};
+inline constexpr int OutputHeights[] = {720,1080,1440,2160,1080,1440,1600,1080,1440,2160,480,600,768,768,900};
+inline constexpr int OutputCount = 15;
+/// The settings screen's fixed display list (M6.5a): 640x480 up to 1920x1080, in size order.
+/// Indices into OutputWidths/OutputHeights; the larger entries above are for the upscaler and overlay.
+inline constexpr int DisplayModeIndices[] = {10, 11, 12, 0, 13, 14, 1};
+inline constexpr int DisplayModeCount = 7;
 inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 
 struct Values {
