@@ -122,8 +122,32 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.graphics_saturation=Clamp(std::isfinite(f)?f:1.0f,0.0f,2.0f);
     } else if (key == "model_lod") {
         v.model_lod = std::clamp(i, -2, 2);
+    } else if (key == "display_mode") {
+        if (value == "windowed") v.display_mode = DisplayWindowed;
+        else if (value == "borderless") v.display_mode = DisplayBorderless;
+        else if (value == "fullscreen") v.display_mode = DisplayFullscreen;
+        else std::printf("Settings: unknown display_mode '%s' (windowed, borderless or fullscreen)\n", value.c_str());
+        v.fullscreen = v.display_mode != DisplayWindowed;
+    } else if (key == "vsync") {
+        v.vsync = i != 0;
+    } else if (key == "fps_ingame") {
+        if (i == 60 || i == 30) v.fps_ingame = i;
+        else std::printf("Settings: fps_ingame must be 60 or 30, got '%s'\n", value.c_str());
+    } else if (key == "fps_replay") {
+        if (i == 60 || i == 30) v.fps_replay = i;
+        else std::printf("Settings: fps_replay must be 60 or 30, got '%s'\n", value.c_str());
+    } else if (key == "audio_buffer") {
+        v.audio_buffer = std::clamp(i, 1, 8);
+    } else if (key == "quality") {
+        if (value == "low") v.quality = 0;
+        else if (value == "medium") v.quality = 1;
+        else if (value == "high") v.quality = 2;
+        else if (value == "0" || value == "1" || value == "2") v.quality = i;
+        else std::printf("Settings: unknown quality '%s' (low, medium or high)\n", value.c_str());
     } else if (key == "fullscreen") {
         v.fullscreen = i != 0;
+        /* An old settings file (fullscreen only) means the borderless mode it always meant. */
+        if (v.fullscreen && v.display_mode == DisplayWindowed) v.display_mode = DisplayBorderless;
     } else if (key == "live_resolution") {
         v.live_resolution = value == "auto" ? -1 : std::clamp(i, 0, 1);
     } else if (key == "output_res") {
@@ -288,7 +312,14 @@ void Save() {
     for (int e = 0; e < EffectCount; ++e) {
         put(Effects[e].key, flag(v.effects[e]));
     }
-    put("fullscreen", flag(v.fullscreen));
+    put("fullscreen", flag(v.fullscreen || v.display_mode != DisplayWindowed));
+    put("display_mode", v.display_mode == DisplayFullscreen ? "fullscreen"
+        : v.display_mode == DisplayBorderless ? "borderless" : "windowed");
+    put("vsync", flag(v.vsync));
+    put("fps_ingame", std::to_string(v.fps_ingame.load()));
+    put("fps_replay", std::to_string(v.fps_replay.load()));
+    put("audio_buffer", std::to_string(v.audio_buffer.load()));
+    put("quality", v.quality == 0 ? "low" : v.quality == 1 ? "medium" : "high");
     put("graphics_controls",flag(v.graphics_controls));
     put("graphics_vignette",flag(v.graphics_vignette));
     put("graphics_ao_strength",fixed(v.graphics_ao_strength,2));

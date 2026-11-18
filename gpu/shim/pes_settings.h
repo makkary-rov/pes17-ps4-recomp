@@ -54,6 +54,7 @@ inline constexpr int OutputCount = 15;
 /// Indices into OutputWidths/OutputHeights; the larger entries above are for the upscaler and overlay.
 inline constexpr int DisplayModeIndices[] = {10, 11, 12, 0, 13, 14, 1};
 inline constexpr int DisplayModeCount = 7;
+inline constexpr int DisplayWindowed = 0, DisplayBorderless = 1, DisplayFullscreen = 2;
 inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 
 struct Values {
@@ -91,6 +92,15 @@ struct Values {
     std::atomic<int> output_res{OutputDefault}; ///< index into OutputWidths
     /// Borderless fullscreen window at the desktop size (F11 toggles; PES_FULLSCREEN overrides).
     std::atomic<bool> fullscreen{false};
+    /// Display mode (settings screen, M6.5a): windowed, borderless (the current fullscreen), or
+    /// fullscreen. `fullscreen` above stays true for the two full-screen modes.
+    std::atomic<int> display_mode{DisplayWindowed};
+    /// Vertical sync, and the frame-rate caps for play and for replays (60 or 30 each).
+    std::atomic<bool> vsync{true};
+    std::atomic<int> fps_ingame{60}, fps_replay{30};
+    /// Saved only, no effect yet (user decision): audio buffer 1..8, quality 0 low, 1 medium, 2 high.
+    std::atomic<int> audio_buffer{1};
+    std::atomic<int> quality{2};
     /// Live resolution and preset changes (run.sh): 0 off by default (startup patch, fastest
     /// on the Steam Deck and older GPUs), -1 auto (strong discrete GPUs), 1 on. On restart.
     std::atomic<int> live_resolution{0};

@@ -112,6 +112,8 @@ if [[ ${1:-} == --test ]]; then
     out/audio-mix-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_display_modes.cpp gpu/shim/pes_settings.cpp -o out/display-modes-test
     (cd out && ./display-modes-test)
+    "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings_keys.cpp gpu/shim/pes_settings.cpp -o out/settings-keys-test
+    (cd out && ./settings-keys-test)
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_settings.cpp gpu/shim/pes_settings.cpp -o out/settings-test
     (cd out && ./settings-test)
     if [[ -n $windows ]]; then
