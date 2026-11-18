@@ -20,6 +20,11 @@ int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const ch
 int PesIniSavePadMethod(const char *path, int method);
 int PesIniLoadPadMethod(const char *path, int *method);
 
+/* One whole-number setting, key=value (for example audio_buffer=3). Save replaces the key's line or
+ * appends it; load returns 1 if the file has a number for the key, else 0 (value unchanged). */
+int PesIniSaveInt(const char *path, const char *key, int value);
+int PesIniLoadInt(const char *path, const char *key, int *value);
+
 /* Reads the bindings. Returns bit 1 if the file had key lines (keys set), bit 2 if it had pad lines
  * (pads set for the bindable slots), 0 if neither (nothing changed, so the caller keeps its defaults). */
 int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);

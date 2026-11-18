@@ -12,6 +12,7 @@
 #include "settings_keyboard.h"
 #include "settings_ini.h"
 #include "settings_controller.h"
+#include "settings_audio.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -34,7 +35,8 @@ static void SaveAndClose(HWND hwnd) {
     SettingsKeyboardGet(keys);
     SettingsControllerGet(pads);
     if (!PesIniSaveBindings(PesConfigPath(), keys, pads) ||
-        !PesIniSavePadMethod(PesConfigPath(), SettingsControllerMethod())) {
+        !PesIniSavePadMethod(PesConfigPath(), SettingsControllerMethod()) ||
+        !PesIniSaveInt(PesConfigPath(), "audio_buffer", SettingsAudioBuffer())) {
         MessageBoxW(hwnd, L"The settings could not be saved.", L"Settings", MB_OK | MB_ICONERROR);
         return;
     }
@@ -79,9 +81,11 @@ static void CreateControls(HWND hwnd) {
     SettingsDisplayCreate(hwnd, font);
     SettingsKeyboardCreate(hwnd, font);
     SettingsControllerCreate(hwnd, font);
+    SettingsAudioCreate(hwnd, font);
     SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
     SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
     SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
+    SettingsAudioShow(TabCtrl_GetCurSel(g_tabs) == 3);
     LayoutControls(hwnd);
 }
 
@@ -117,6 +121,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
             SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
             SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
+            SettingsAudioShow(TabCtrl_GetCurSel(g_tabs) == 3);
         }
         return 0;
     }

@@ -127,6 +127,21 @@ int main(void) {
     assert(strstr(text, "key.cross=X\n") != NULL);             /* bindings kept */
     free(text);
 
+    /* A whole-number setting: saved, replaced, read back; other lines kept. */
+    WriteFile(path, "upscaler=fsr3\nkey.cross=X\n");
+    int audio = 0;
+    assert(PesIniLoadInt(path, "audio_buffer", &audio) == 0 && audio == 0);
+    assert(PesIniSaveInt(path, "audio_buffer", 3) == 1);
+    assert(PesIniLoadInt(path, "audio_buffer", &audio) == 1 && audio == 3);
+    assert(PesIniSaveInt(path, "audio_buffer", 7) == 1);
+    assert(PesIniLoadInt(path, "audio_buffer", &audio) == 1 && audio == 7);
+    text = ReadFile(path);
+    assert(strstr(text, "audio_buffer=7\n") != NULL);
+    assert(strstr(text, "audio_buffer=3") == NULL);            /* replaced, not appended */
+    assert(strstr(text, "upscaler=fsr3\n") != NULL);
+    assert(strstr(text, "key.cross=X\n") != NULL);
+    free(text);
+
     remove(path);
     printf("PASS: keyboard and gamepad bindings saved and loaded, other settings kept, input method saved\n");
     return 0;

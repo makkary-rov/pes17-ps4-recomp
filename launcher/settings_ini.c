@@ -195,3 +195,56 @@ int PesIniLoadPadMethod(const char *path, int *method) {
     free(text);
     return found;
 }
+
+/* Writes one whole-number setting, key=value, replacing its line (or appending it). Other lines are kept. */
+int PesIniSaveInt(const char *path, const char *key, int value) {
+    char *old = OldText(path);
+    if (!old) return 0;
+    char prefix[64];
+    snprintf(prefix, sizeof(prefix), "%s=", key);
+    const size_t plen = strlen(prefix);
+    char tmp[1024];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    FILE *out = fopen(tmp, "wb");
+    if (!out) { free(old); return 0; }
+    const char *p = old;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        const size_t len = end ? (size_t)(end - p) + 1 : strlen(p);
+        if (strncmp(p, prefix, plen) != 0) {
+            if (fwrite(p, 1, len, out) != len) { free(old); fclose(out); remove(tmp); return 0; }
+            if (p[len - 1] != '\n') fputc('\n', out);
+        }
+        p += len;
+    }
+    free(old);
+    fprintf(out, "%s%d\n", prefix, value);
+    if (fclose(out) != 0) { remove(tmp); return 0; }
+    return ReplaceFile(path, tmp);
+}
+
+/* Reads one whole-number setting. Returns 1 if the file has a number for the key, else 0 (value unchanged). */
+int PesIniLoadInt(const char *path, const char *key, int *value) {
+    char *text = ReadAll(path);
+    if (!text) return 0;
+    char prefix[64];
+    snprintf(prefix, sizeof(prefix), "%s=", key);
+    const size_t plen = strlen(prefix);
+    int found = 0;
+    const char *p = text;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        if (strncmp(p, prefix, plen) == 0) {
+            char *stop = NULL;
+            const long v = strtol(p + plen, &stop, 10);
+            if (stop != p + plen) {
+                *value = (int)v;
+                found = 1;
+            }
+        }
+        if (!end) break;
+        p = end + 1;
+    }
+    free(text);
+    return found;
+}
