@@ -43,9 +43,19 @@ void TraceOverlap(const ImageInfo& requested, Binding binding, ImageId id, const
     if (action == "reuse") {
         return;
     }
+    // PES_IMAGE_OVERLAP_WIDTH=<w>: overlaps where either image is w pixels wide are always
+    // logged (no rate limit), and others are not (e.g. 1024 for the upstream title's kits).
+    static const u32 only_width = [] {
+        const char* value = std::getenv("PES_IMAGE_OVERLAP_WIDTH");
+        return value ? u32(std::strtoul(value, nullptr, 10)) : 0u;
+    }();
+    if (only_width && requested.size.width != only_width &&
+        (!candidate || candidate->info.size.width != only_width)) {
+        return;
+    }
     static std::atomic<u64> emitted{0};
     const u64 index = emitted.fetch_add(1, std::memory_order_relaxed);
-    if (index >= 512 && (index % 1024) != 0) {
+    if (!only_width && index >= 512 && (index % 1024) != 0) {
         return;
     }
 
