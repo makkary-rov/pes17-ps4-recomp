@@ -3851,6 +3851,23 @@ bool Rasterizer::DmaMayWriteOnCpu(VAddr dst, u32 num_bytes) {
 
 void Rasterizer::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, bool src_gds) {
     DrainDrawPipe();
+    // pes diagnostics: PES_COPY_TRACE_MIN=<bytes> logs every DMA copy at least that large, with
+    // whether an image the texture cache holds overlaps its source (and was written by the GPU).
+    static const u64 trace_min = [] {
+        const char* value = std::getenv("PES_COPY_TRACE_MIN");
+        return value ? std::strtoull(value, nullptr, 0) : 0ull;
+    }();
+    if (trace_min && num_bytes >= trace_min && !src_gds && !dst_gds) {
+        const VideoCore::ImageId src_image = texture_cache.FindImageFromRange(src, num_bytes, false);
+        const bool src_gpu_written =
+            src_image && True(texture_cache.GetImage(src_image).flags &
+                              VideoCore::ImageFlagBits::GpuModified);
+        std::printf("DmaCopy: %#llx <- %#llx, %u bytes; source image %s%s; source buffer gpu %d\n",
+                    static_cast<unsigned long long>(dst), static_cast<unsigned long long>(src),
+                    num_bytes, src_image ? "yes" : "no", src_gpu_written ? " (GPU-written)" : "",
+                    int(buffer_cache.IsRegionGpuModified(src, num_bytes)));
+        std::fflush(stdout);
+    }
     // pes PES_GUEST_IN_PLACE: see FillBuffer (in place: the GPU, in stream order).
     if (!dst_gds && !buffer_cache.IsAnyInPlace(dst, num_bytes) &&
         !buffer_cache.IsRegionGpuModified(dst, num_bytes)) {
