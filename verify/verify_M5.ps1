@@ -7,7 +7,7 @@
     Needs out\verify\m2b\boot-linked.bin (verify_M2b.ps1). Starts the game; YOU start a match from the menu with
     the keyboard (any quick exhibition match). The game runs until -Seconds (default 300) or until you close it.
     Writes out\verify\M5-result.json and out\verify\M5-run.log. Criteria:
-    E1 observer reported mode=15 sub=2; E2 the longest continuous live stretch (mode 15 sub 2) is at least -ReferenceSeconds;
+    E1 observer reported mode=15 sub=2; E2 the longest continuous match stretch (modes 15/16/18 from kickoff) is at least -ReferenceSeconds;
     E3 no stop or fault, and the script (not a crash or close) ended the run; E4 the user's sign-off (-SignOff) is recorded.
     -DumpAt 120,180 asks the runtime for a thread dump (every thread's guest call chain) at those seconds.
 .EXAMPLE
@@ -103,16 +103,19 @@ try {
         elseif ($samples.Count -eq 0) { Set-Crit 'E1' 'FAIL' 'no observer line (the match controller was never created)' ([ordered]@{ exit_code = $code }) }
         else { Set-Crit 'E1' 'FAIL' 'observer never reported mode=15 sub=2 (no live match)' ([ordered]@{ mode_sub_seen = $modes }) }
 
-        # E2: the longest continuous stretch of mode 15 sub 2 (live match) samples; any other sample ends a stretch.
+        # E2: the longest continuous match stretch: it starts at a live sample (mode 15 sub 2) and continues through
+        # modes 15, 16 and 18 (16/18 = the game's restart-kickoff path after a goal or at half time,
+        # src/title/cusa04957_observer.h); any other mode (menus, loading) ends it.
         $live_for = 0.0; $start = $null; $prev = $null
         foreach ($s in ($samples | Sort-Object t)) {
-            if ($s.mode -eq 15 -and $s.sub -eq 2) { if ($null -eq $start) { $start = $s.t }; $prev = $s.t }
+            $live = ($s.mode -eq 15 -and $s.sub -eq 2)
+            if ($live -or ($null -ne $start -and @(15, 16, 18) -contains $s.mode)) { if ($null -eq $start) { $start = $s.t }; $prev = $s.t }
             else { if ($null -ne $start) { $live_for = [math]::Max($live_for, $prev - $start) }; $start = $null }
         }
         if ($null -ne $start) { $live_for = [math]::Max($live_for, $prev - $start) }
         $live_for = [math]::Round($live_for, 1)
-        if ($live_for -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('longest continuous live stretch (mode 15 sub 2) ' + $live_for + ' s >= reference ' + $ReferenceSeconds + ' s') $null }
-        else { Set-Crit 'E2' 'FAIL' ('longest continuous live stretch (mode 15 sub 2) ' + $live_for + ' s < reference ' + $ReferenceSeconds + ' s') $null }
+        if ($live_for -ge $ReferenceSeconds) { Set-Crit 'E2' 'PASS' ('longest continuous match stretch (modes 15/16/18 from kickoff) ' + $live_for + ' s >= reference ' + $ReferenceSeconds + ' s') $null }
+        else { Set-Crit 'E2' 'FAIL' ('longest continuous match stretch (modes 15/16/18 from kickoff) ' + $live_for + ' s < reference ' + $ReferenceSeconds + ' s') $null }
 
         $stop = $lines | Where-Object { $_ -like 'STOP:*' } | Select-Object -First 1
         $fault = $lines | Where-Object { $_ -match '^(Guest|Host) fault ' } | Select-Object -First 1
