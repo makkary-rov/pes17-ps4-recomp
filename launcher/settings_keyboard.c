@@ -141,7 +141,10 @@ void SettingsKeyboardCreate(HWND parent, HFONT font) {
 
     for (HWND c = GetWindow(p, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
     PesKeyboardDefaults(g_keys);
-    PesIniLoadKeyboard(PesConfigPath(), g_keys); /* the saved bindings, if the file has any */
+    {
+        char ignored[PES_PAD_SLOTS][PES_PAD_NAME_MAX]; /* the gamepad part belongs to the Controller tab */
+        PesIniLoadBindings(PesConfigPath(), g_keys, ignored);
+    }
     RefreshAll();
     ShowWindow(g_page, SW_HIDE);
 }

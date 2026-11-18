@@ -6,17 +6,18 @@
 #define PES_LAUNCHER_SETTINGS_INI_H
 
 #include "settings_keys.h"
+#include "settings_pad.h"
 
 /* The settings file the game and the settings window share: PES_CONFIG, else pes17recomp.ini. */
 const char *PesConfigPath(void);
 
-/* Writes the 24 key.<input>= lines (replacing any existing ones; an unbound slot is written empty).
- * Other lines, comments included, are kept in order. The file is replaced through a temporary file.
- * Returns 1 on success, 0 on failure (the file is then left as it was). */
-int PesIniSaveKeyboard(const char *path, const int keys[PES_PAD_SLOTS]);
+/* Writes the bindings: key.<input>= for the 24 slots and pad.<input>= for the bindable slots
+ * (replacing those lines; an unbound slot is written empty). Other lines, comments included, are kept
+ * in order. The file is replaced through a temporary file. Returns 1 on success, 0 on failure. */
+int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
 
-/* Reads the key.<input>= lines for the 24 slots into keys. Returns 1 if the file has any of them,
- * 0 if not (keys are then left unchanged, so the caller keeps its defaults). */
-int PesIniLoadKeyboard(const char *path, int keys[PES_PAD_SLOTS]);
+/* Reads the bindings. Returns bit 1 if the file had key lines (keys set), bit 2 if it had pad lines
+ * (pads set for the bindable slots), 0 if neither (nothing changed, so the caller keeps its defaults). */
+int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]);
 
 #endif

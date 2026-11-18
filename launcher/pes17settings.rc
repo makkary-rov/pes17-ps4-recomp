@@ -24,4 +24,5 @@
 232 BITMAP "assets/icon_22.bmp"
 233 BITMAP "assets/icon_23.bmp"
 201 BITMAP "assets/background.bmp"
+202 BITMAP "assets/controller_pad.bmp"
 1 24 "pes17settings.manifest"

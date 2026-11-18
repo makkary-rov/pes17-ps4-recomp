@@ -11,6 +11,7 @@
 #include "settings_display.h"
 #include "settings_keyboard.h"
 #include "settings_ini.h"
+#include "settings_controller.h"
 
 #define CLIENT_WIDTH 800
 #define CLIENT_HEIGHT 716
@@ -29,8 +30,10 @@ static HBITMAP g_background;
  * the window open, so nothing is lost silently. */
 static void SaveAndClose(HWND hwnd) {
     int keys[PES_PAD_SLOTS];
+    char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX];
     SettingsKeyboardGet(keys);
-    if (!PesIniSaveKeyboard(PesConfigPath(), keys)) {
+    SettingsControllerGet(pads);
+    if (!PesIniSaveBindings(PesConfigPath(), keys, pads)) {
         MessageBoxW(hwnd, L"The settings could not be saved.", L"Settings", MB_OK | MB_ICONERROR);
         return;
     }
@@ -74,8 +77,10 @@ static void CreateControls(HWND hwnd) {
     SendMessageW(g_cancel, WM_SETFONT, (WPARAM)font, TRUE);
     SettingsDisplayCreate(hwnd, font);
     SettingsKeyboardCreate(hwnd, font);
+    SettingsControllerCreate(hwnd, font);
     SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
     SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
+    SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
     LayoutControls(hwnd);
 }
 
@@ -110,6 +115,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (nm->idFrom == ID_TABS && nm->code == TCN_SELCHANGE) {
             SettingsDisplayShow(TabCtrl_GetCurSel(g_tabs) == 0);
             SettingsKeyboardShow(TabCtrl_GetCurSel(g_tabs) == 1);
+            SettingsControllerShow(TabCtrl_GetCurSel(g_tabs) == 2);
         }
         return 0;
     }
@@ -147,7 +153,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, LPWSTR cmdline, int show) {
 
     MSG m;
     while (GetMessageW(&m, NULL, 0, 0) > 0) {
-        if (SettingsKeyboardFilter(&m)) continue; /* a key for a binding button being set */
+        if (SettingsKeyboardFilter(&m) || SettingsControllerFilter(&m)) continue; /* a key or capture for a binding button */
         if (!IsDialogMessageW(hwnd, &m)) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
