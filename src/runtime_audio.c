@@ -10,6 +10,13 @@
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "runtime_audio_mix.h"
+
+/* PES_AUDIO_GAIN_DB: output level after the 8-to-2 fold, dB (default +5). Read once. */
+static float fold_gain(void) {
+    static float gain=0.0f;
+    if (gain==0.0f) { const char *v=getenv("PES_AUDIO_GAIN_DB"); gain=pes_audio_gain_from_db(v ? (float)atof(v) : 5.0f); }
+    return gain;
+}
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -166,7 +173,7 @@ static int32_t output_port(int32_t handle, const void *data, int pace) {
         }
         if (p->dump) fwrite(converted,1,bytes,p->dump);
         static float stereo[2048*2];
-        if (fold) { pes_audio_downmix_8_to_2((const float *)(const void *)converted,stereo,(size_t)p->frames); }
+        if (fold) { pes_audio_downmix_8_to_2((const float *)(const void *)converted,stereo,(size_t)p->frames,fold_gain()); }
         const unsigned char *device_data = fold ? (const unsigned char *)(const void *)stereo : converted;
         if (p->stats) {
             uint64_t now=now_ns();

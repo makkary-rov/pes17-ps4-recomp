@@ -14,13 +14,19 @@ static inline float pes_audio_clamp1(float v) {
     return v > 1.0f ? 1.0f : v < -1.0f ? -1.0f : v;
 }
 
-/* in: frames * 8 floats (SDL 7.1 order); out: frames * 2 floats (L R). */
-static inline void pes_audio_downmix_8_to_2(const float *in, float *out, size_t frames) {
+/* Output level after the fold-down, in dB (user setting PES_AUDIO_GAIN_DB; default +5 dB, as the
+ * user asked for a louder mix than the unity fold-down gives). */
+static inline float pes_audio_gain_from_db(float db) {
+    return (float)(db == db && db > -60.0f && db < 24.0f ? __builtin_pow(10.0, db / 20.0) : __builtin_pow(10.0, 5.0 / 20.0));
+}
+
+/* in: frames * 8 floats (SDL 7.1 order); out: frames * 2 floats (L R), scaled by gain (linear). */
+static inline void pes_audio_downmix_8_to_2(const float *in, float *out, size_t frames, float gain) {
     const float k = 0.70710678f;
     for (size_t f = 0; f < frames; ++f) {
         const float *s = in + f * 8;
-        out[f * 2] = pes_audio_clamp1(s[0] + k * (s[2] + s[4] + s[6]));
-        out[f * 2 + 1] = pes_audio_clamp1(s[1] + k * (s[2] + s[5] + s[7]));
+        out[f * 2] = pes_audio_clamp1(gain * (s[0] + k * (s[2] + s[4] + s[6])));
+        out[f * 2 + 1] = pes_audio_clamp1(gain * (s[1] + k * (s[2] + s[5] + s[7])));
     }
 }
 
