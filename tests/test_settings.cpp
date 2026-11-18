@@ -24,6 +24,15 @@ int main() {
     const char* path = filename.c_str();
     const char ini[] = "# launcher\nupscaler=fsr3\nkey.cross=X, Space\npad.circle=a\nshow_fps=0\n"
                        "fullscreen_hint=1\n";
+    // With no settings file the upscaler is off (plan row H-16: no upscaler by default).
+#ifdef _WIN32
+    _putenv_s("PES_CONFIG", (filename + ".none").c_str());
+#else
+    setenv("PES_CONFIG", (filename + ".none").c_str(), 1);
+#endif
+    PesSettings::Load();
+    assert(PesSettings::Get().upscaler == PesSettings::UpscalerOff);
+    assert(PesSettings::Get().startup_upscaler == PesSettings::UpscalerOff);
     { std::ofstream file(path); file << ini; assert(file.good()); }
 #ifdef _WIN32
     _putenv_s("PES_CONFIG", path);

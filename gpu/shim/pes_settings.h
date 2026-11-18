@@ -54,7 +54,7 @@ inline constexpr int OutputDefault = 1; ///< 1920x1080, the game's own size
 
 struct Values {
     std::atomic<MenuLanguage> menu_language{MenuLanguage::English};
-    std::atomic<int> upscaler{UpscalerFsr3};
+    std::atomic<int> upscaler{UpscalerOff}; // off by default (plan row H-16)
     std::atomic<int> preset{NativeAA};
     std::atomic<int> dlss_preset{0}; // independent NGX model hint
     std::atomic<bool> sharpen{true};
@@ -96,7 +96,7 @@ struct Values {
 
     /// Startup settings for the explicit PES_RENDER_RES compatibility patch only.
     int startup_preset = NativeAA;
-    int startup_upscaler = UpscalerFsr3;
+    int startup_upscaler = UpscalerOff;
     bool startup_object_motion = true;
     bool startup_effects[EffectCount]{};
     int startup_model_lod = 0;
