@@ -7,7 +7,6 @@
 #include <time.h>
 
 #include "runtime_patch.h"
-#include "title/cusa04957_patches.h"
 #include "runtime_trace.h"
 
 static void hex(const uint8_t d[32], char out[65]) {

@@ -2,7 +2,7 @@
 # Patch records
 
 Each game-specific patch has one record. Records use new names only ("upstream title" for the game).
-This file holds the template and the records (table: `src/title/cusa04957_patches.h`).
+This file holds the template and the records (no title patch table is active).
 
 | Field | Content |
 |---|---|

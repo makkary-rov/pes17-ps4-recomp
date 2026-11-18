@@ -11,8 +11,6 @@
 #include "runtime.h"
 #include "runtime_trace.h"
 #include "gpu/pesgpu.h"
-#include "runtime_patch.h"
-#include "title/cusa04957_patches.h"
 #if !defined(__x86_64__) || !defined(__GNUC__)
 #error This prototype requires x86-64 GCC or Clang (including MinGW).
 #endif
@@ -1234,11 +1232,6 @@ int main(int argc, char **argv) {
         memcpy(image + relocs[i].target, &value, 8);
     }
     if (patch_file) apply_patches(patch_file, segments, ns, relocs, nr);
-    if (!getenv("PES_NO_TITLE_PATCHES")) { /* signature-checked title table (docs/patch-records.md) */
-        pes_patch_report pr;
-        pes_patch_apply((uint8_t *)image, size, pes_cusa04957_patches, PES_CUSA04957_PATCH_COUNT, &pr);
-        printf("Title patches: applied %u, refused %u\n", pr.applied, pr.refused);
-    }
 #ifdef _WIN32
     printf("Guest thread pointer reads: %" PRIu64 " use TEB TLS slot %u\n", patch_tls_reads(segments, ns), runtime_win_tls_slot());
 #endif
