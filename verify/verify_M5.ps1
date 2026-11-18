@@ -19,7 +19,7 @@ param(
     [double]$ReferenceSeconds = 109.4,
     [string]$SignOff = '',
     [switch]$FileTrace,
-    [int[]]$DumpAt = @()
+    [int[]]$DumpAt = @(150, 250)
 )
 
 $ErrorActionPreference = 'Continue'
