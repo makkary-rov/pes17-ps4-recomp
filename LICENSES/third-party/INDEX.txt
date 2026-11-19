@@ -15,10 +15,12 @@ xbyak (FetchContent) - BSD-3-Clause
 Libraries the programs link from the MSYS2 CLANG64 packages (installed by the builder, not in this tree):
 SDL3 - zlib
 Vulkan loader and headers - Apache-2.0
-FFmpeg (libavcodec, libavformat, libavutil, libswscale, libswresample) - LGPL-2.1-or-later; GPL-2.0-or-later or GPL-3.0 if the installed package was configured with GPL components (check the package)
+FFmpeg (libavcodec, libavformat, libavutil, libswscale, libswresample) - LGPL-2.1-or-later when built without GPL components. The MSYS2 package the project was built and tested with is configured with --enable-gpl --enable-version3, which makes it GPL-3.0-or-later: a binary built as BUILDING.md describes can therefore only be distributed under GPL-3.0-or-later. This repository ships source only, and its own files are GPL-2.0-or-later, which GPL-3.0 allows
 fmt - MIT
 xxHash - BSD-2-Clause
 Zydis / Zycore - MIT
 Boost (headers) - BSL-1.0
 Vulkan Memory Allocator and robin-map - MIT
 libc++ and libunwind (LLVM runtime) - Apache-2.0 with LLVM exceptions
+winpthreads (mingw-w64) - MIT-style licence of the mingw-w64 runtime
+Code inside gpu/shadps4 and gpu/shim keeps the licence and copyright notice in its own file header; gpu/shadps4/LICENSE covers the rest

@@ -106,7 +106,7 @@ static void Column(HWND p, const int slots[12], int chip_x, int button_x) {
     for (int i = 0; i < 12; ++i) {
         const int s = slots[i];
         const int y = 115 + 33 * i;
-        /* The button's icon, centred in its column. */
+        /* The button's icon (40 x 26, tools/art/make_settings_art.py), centred in its column. */
         HWND icon = Make(p, L"STATIC", L"", SS_BITMAP, chip_x + 9, y, 40, 26, 0);
         HBITMAP bmp = LoadBitmapW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDB_ICON_BASE + s));
         if (bmp) SendMessageW(icon, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)bmp);
@@ -131,7 +131,7 @@ void SettingsKeyboardCreate(HWND parent, HFONT font) {
     SendMessageW(device, CB_SETCURSEL, 0, 0);
     EnableWindow(device, FALSE);
 
-    /* The gamepad picture, with the two columns of bindings around it. */
+    /* The gamepad picture (tools/art/cut_gamepad.py), with the two columns of bindings around it. */
     Column(p, kLeft, 21, 86);
     Column(p, kRight, 548, 614);
     HWND picture = Make(p, L"STATIC", L"", SS_BITMAP, 258, 109, 260, 325, 0);

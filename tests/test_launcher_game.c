@@ -31,6 +31,7 @@ int main(void) {
     remove("test_launcher_data/boot-linked.bin");
     remove("test_launcher_data/import-aliases.txt");
     remove("test_launcher_data/content.bin");
+    remove("test_launcher_data/prepared.stamp");
 
     /* A folder without eboot.bin is not the game; with it, it is. */
     assert(PesLauncherIsGameDir(game) == 0);
@@ -38,13 +39,27 @@ int main(void) {
     Touch("test_launcher_game/eboot.bin");
     assert(PesLauncherIsGameDir(game) == 1);
 
-    /* Prepared only when all three files exist. */
-    assert(PesLauncherPrepared(data) == 0);
+    /* Prepared only when all three files exist AND the stamp says they are current for this game folder. */
+    assert(PesLauncherPrepared(data, game) == 0);
     Touch("test_launcher_data/boot-linked.bin");
     Touch("test_launcher_data/import-aliases.txt");
-    assert(PesLauncherPrepared(data) == 0);
+    assert(PesLauncherPrepared(data, game) == 0);
     Touch("test_launcher_data/content.bin");
-    assert(PesLauncherPrepared(data) == 1);
+    assert(PesLauncherPrepared(data, game) == 0);                 /* files alone are not enough: no stamp */
+    assert(PesLauncherWriteStamp(data, game) == 1);
+    assert(PesLauncherPrepared(data, game) == 1);
+    assert(PesLauncherPrepared(data, "another_game_folder") == 0); /* prepared for a different folder */
+    assert(PesLauncherPrepared(data, "") == 0 && PesLauncherPrepared("", game) == 0);
+    {   /* a stamp from another version of the preparation is not current */
+        FILE *f = fopen("test_launcher_data/prepared.stamp", "wb");
+        assert(f);
+        fprintf(f, "v%d\n%s\n", PES_LAUNCHER_PREP_VERSION + 1, game);
+        fclose(f);
+        assert(PesLauncherPrepared(data, game) == 0);
+    }
+    assert(PesLauncherWriteStamp(data, game) == 1 && PesLauncherPrepared(data, game) == 1);
+    assert(PesLauncherClearStamp(data) == 1 && PesLauncherPrepared(data, game) == 0); /* a preparation that starts clears it */
+    assert(PesLauncherClearStamp(data) == 1);                                          /* clearing nothing is fine */
 
     /* The three steps: script under root/scripts, game folder, title config (not for step 1), output. */
     char args[4096];
@@ -82,6 +97,7 @@ int main(void) {
 
     remove("test_launcher_game/eboot.bin");
     remove("test_launcher_data/boot-linked.bin");
+    remove("test_launcher_data/prepared.stamp");
     printf("PASS: launcher game folder, preparation steps and Play arguments\n");
     return 0;
 }

@@ -11,8 +11,15 @@
 int PesLauncherIsGameDir(const char *dir);
 
 /* 1 if data_dir holds the prepared files the loader needs (boot-linked.bin, import-aliases.txt and
- * content.bin), else 0. */
-int PesLauncherPrepared(const char *data_dir);
+ * content.bin) AND they were prepared for this game folder by this version of the preparation (the stamp
+ * file, written when all steps succeeded), else 0. A failed or older preparation is never taken for
+ * current. */
+#define PES_LAUNCHER_PREP_VERSION 1
+int PesLauncherPrepared(const char *data_dir, const char *game_dir);
+
+/* The stamp: removed when a preparation starts, written when it has succeeded. Return 1 on success. */
+int PesLauncherClearStamp(const char *data_dir);
+int PesLauncherWriteStamp(const char *data_dir, const char *game_dir);
 
 /* The preparation steps, run once per game folder with Python 3 and no extra packages:
  * 0 prepare.py (the game's executable into boot.bin, analysis.json, import-aliases.txt),

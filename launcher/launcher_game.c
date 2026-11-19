@@ -7,15 +7,20 @@
 #include <windows.h>
 #endif
 
-/* Opens a UTF-8 path for reading (on Windows through the wide API, so any folder name works). */
-static int Exists(const char *path) {
+/* Opens a UTF-8 path (on Windows through the wide API, so any folder name works). */
+static FILE *OpenUtf8(const char *path, const char *mode) {
 #ifdef _WIN32
-    wchar_t wide[2048];
-    if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 2048)) return 0;
-    FILE *f = _wfopen(wide, L"rb");
+    wchar_t wide[2048], wmode[8];
+    if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 2048)) return NULL;
+    if (!MultiByteToWideChar(CP_UTF8, 0, mode, -1, wmode, 8)) return NULL;
+    return _wfopen(wide, wmode);
 #else
-    FILE *f = fopen(path, "rb");
+    return fopen(path, mode);
 #endif
+}
+
+static int Exists(const char *path) {
+    FILE *f = OpenUtf8(path, "rb");
     if (!f) return 0;
     fclose(f);
     return 1;
@@ -31,9 +36,46 @@ int PesLauncherIsGameDir(const char *dir) {
     return dir && dir[0] && JoinExists(dir, "eboot.bin");
 }
 
-int PesLauncherPrepared(const char *data_dir) {
-    return data_dir && data_dir[0] && JoinExists(data_dir, "boot-linked.bin") &&
-           JoinExists(data_dir, "import-aliases.txt") && JoinExists(data_dir, "content.bin");
+/* The stamp text: the preparation version and the game folder the files were prepared for. */
+static int StampText(char *out, size_t cap, const char *game_dir) {
+    return snprintf(out, cap, "v%d\n%s\n", PES_LAUNCHER_PREP_VERSION, game_dir) < (int)cap;
+}
+
+int PesLauncherPrepared(const char *data_dir, const char *game_dir) {
+    if (!data_dir || !data_dir[0] || !game_dir || !game_dir[0]) return 0;
+    if (!JoinExists(data_dir, "boot-linked.bin") || !JoinExists(data_dir, "import-aliases.txt") ||
+        !JoinExists(data_dir, "content.bin")) return 0;
+    char path[2048], expected[2048], found[2048];
+    if (snprintf(path, sizeof(path), "%s/prepared.stamp", data_dir) >= (int)sizeof(path)) return 0;
+    if (!StampText(expected, sizeof(expected), game_dir)) return 0;
+    FILE *f = OpenUtf8(path, "rb");
+    if (!f) return 0;
+    const size_t n = fread(found, 1, sizeof(found) - 1, f);
+    fclose(f);
+    found[n] = 0;
+    return strcmp(found, expected) == 0;
+}
+
+int PesLauncherClearStamp(const char *data_dir) {
+    char path[2048];
+    if (!data_dir || snprintf(path, sizeof(path), "%s/prepared.stamp", data_dir) >= (int)sizeof(path)) return 0;
+#ifdef _WIN32
+    wchar_t wide[2048];
+    if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, wide, 2048)) return 0;
+    return DeleteFileW(wide) != 0 || GetLastError() == ERROR_FILE_NOT_FOUND;
+#else
+    return remove(path) == 0 || !Exists(path);
+#endif
+}
+
+int PesLauncherWriteStamp(const char *data_dir, const char *game_dir) {
+    char path[2048], text[2048];
+    if (!data_dir || !game_dir || snprintf(path, sizeof(path), "%s/prepared.stamp", data_dir) >= (int)sizeof(path)) return 0;
+    if (!StampText(text, sizeof(text), game_dir)) return 0;
+    FILE *f = OpenUtf8(path, "wb");
+    if (!f) return 0;
+    const int ok = fputs(text, f) >= 0;
+    return fclose(f) == 0 && ok;
 }
 
 const char *PesLauncherStepName(int step) {

@@ -119,6 +119,11 @@ def git_files():
     return sorted(found)
 
 
+def message_bad(message):
+    """True if a commit message holds an R0 term (both R0 patterns)."""
+    return bool(P.search(message) or Q.search(message))
+
+
 def commit_messages():
     out = subprocess.run(["git", "log", "--all", "--format=%H%x1f%B%x00"], cwd=ROOT,
                          stdin=subprocess.DEVNULL, capture_output=True, check=True).stdout
@@ -166,7 +171,7 @@ def main():
                 lines.append(f"FAIL email {rel}:{lineno}")
                 fails += 1
     for sha, message in commit_messages():
-        if P.search(message):
+        if message_bad(message):
             lines.append(f"FAIL commit-message {sha[:12]}")
             fails += 1
     for sha, author, committer in commit_identities():

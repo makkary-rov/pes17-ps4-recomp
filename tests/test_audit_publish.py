@@ -34,6 +34,13 @@ class NameTests(unittest.TestCase):
         self.assertEqual(ap.PENDING, {})
 
 
+class MessageTests(unittest.TestCase):
+    def test_both_r0_patterns_apply_to_messages(self):
+        self.assertTrue(ap.message_bad('uses ' + BAD_GPU + ' here'))
+        self.assertTrue(ap.message_bad('sets ' + BAD_UNDERSCORE))
+        self.assertFalse(ap.message_bad('Display: window opens at the chosen resolution'))
+
+
 class EmailTests(unittest.TestCase):
     def test_personal_address_in_own_file_is_found(self):
         hits = ap.email_hits('gpu/patches/a.patch', 'From: someone <person' + '@mail.example.com>\n')

@@ -36,6 +36,7 @@ static HBITMAP g_bg, g_tiles[TILE_COUNT];
 static HFONT g_title_font, g_sub_font, g_tile_font, g_note_font;
 static int g_hover = -1, g_selected = -1; /* mouse, keyboard */
 static char g_game_dir[1024];
+static char g_job_game_dir[1024];      /* the game folder the running preparation works on (a private copy) */
 static char g_root[MAX_PATH * 3];     /* where scripts/ and src/ are (UTF-8, forward slashes) */
 static char g_data_dir[MAX_PATH * 3]; /* game-data next to the launcher */
 static wchar_t g_exe_dir[MAX_PATH];
@@ -174,7 +175,7 @@ static void Paint(HWND hwnd) {
         DrawText2(dc, kTileNames[i], g_tile_font, text, r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         if (i == TILE_PLAY && !busy) {
             const wchar_t *note = !PlayReady() ? L"Install first: choose the game folder"
-                                  : !PesLauncherPrepared(g_data_dir) ? L"First start: the game is prepared once"
+                                  : !PesLauncherPrepared(g_data_dir, g_game_dir) ? L"First start: the game is prepared once"
                                                                      : NULL;
             if (note) {
                 RECT n = {r.left, r.bottom - 40, r.right, r.bottom - 10};
@@ -278,7 +279,7 @@ static DWORD WINAPI PrepareThread(LPVOID param) {
         char args[4096];
         wchar_t wide_args[4096], cmd[8192];
         DWORD code = 1;
-        if (!PesLauncherStepArgs(step, args, sizeof(args), g_root, g_data_dir, g_game_dir) || !Widen(args, wide_args, 4096)) {
+        if (!PesLauncherStepArgs(step, args, sizeof(args), g_root, g_data_dir, g_job_game_dir) || !Widen(args, wide_args, 4096)) {
             swprintf(g_fail_text, 700, L"The preparation command is too long (step %d).", step + 1);
             break;
         }
@@ -294,7 +295,10 @@ static DWORD WINAPI PrepareThread(LPVOID param) {
         g_fail_text[0] = 0;
     }
     if (log) CloseHandle(log);
-    PostMessageW(hwnd, WM_PREPARE_DONE, g_fail_text[0] == 0 && PesLauncherPrepared(g_data_dir), 0);
+    /* Only a preparation that ran every step is stamped as current for this game folder. */
+    const int ok = g_fail_text[0] == 0 && PesLauncherWriteStamp(g_data_dir, g_job_game_dir) &&
+                   PesLauncherPrepared(g_data_dir, g_job_game_dir);
+    PostMessageW(hwnd, WM_PREPARE_DONE, ok, 0);
     return 0;
 }
 
@@ -302,6 +306,8 @@ static void StartPrepare(HWND hwnd, int play_after) {
     if (g_busy) return;
     g_fail_text[0] = 0;
     g_play_after = play_after;
+    snprintf(g_job_game_dir, sizeof(g_job_game_dir), "%s", g_game_dir); /* the worker never reads g_game_dir */
+    PesLauncherClearStamp(g_data_dir);                                     /* not current until it succeeds */
     InterlockedExchange(&g_busy, 1);
     InterlockedExchange(&g_step, 0);
     HANDLE t = CreateThread(NULL, 0, PrepareThread, hwnd, 0, NULL);
@@ -320,7 +326,7 @@ static void Play(HWND hwnd) {
         MessageBoxW(hwnd, L"Choose the game folder first (Install).", L"Play", MB_OK | MB_ICONINFORMATION);
         return;
     }
-    if (!PesLauncherPrepared(g_data_dir)) {
+    if (!PesLauncherPrepared(g_data_dir, g_game_dir)) {
         if (MessageBoxW(hwnd, L"The game has to be prepared once before the first start. It can take a few minutes.\n\nPrepare it now?",
                         L"Play", MB_YESNO | MB_ICONQUESTION) == IDYES) StartPrepare(hwnd, 1);
         return;
@@ -440,7 +446,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_ACTIVATE:
-        LoadGameDir(); /* Settings or a previous Install may have changed it */
+        if (!g_busy) LoadGameDir(); /* Settings or a previous Install may have changed it */
         InvalidateRect(hwnd, NULL, FALSE);
         break;
     case WM_DESTROY:
