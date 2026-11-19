@@ -17,6 +17,6 @@ You need your own legally obtained dump to run the project. No game files, keys 
 
 Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with. This project is not affiliated with or endorsed by them.
 
-The launcher can show the game's own title logo. It reads it at run time from the game folder you installed from, keeps it only on your computer, and this repository never contains it. Without a game folder it shows this project's own wordmark.
+The launcher's logo and tile pictures are this project's own: the logo is an original wordmark and the pictures are AI-generated. Nothing from the game's artwork is used or shipped.
 
 This document is not legal advice; a licence review is recommended.
