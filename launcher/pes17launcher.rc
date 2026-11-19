@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Resources of the launcher (pes17launcher.exe): background, four tile pictures, visual-style manifest.
+300 BITMAP "assets/launcher_bg.bmp"
+301 BITMAP "assets/tile_install.bmp"
+302 BITMAP "assets/tile_play.bmp"
+303 BITMAP "assets/tile_settings.bmp"
+304 BITMAP "assets/tile_exit.bmp"
+1 24 "pes17settings.manifest"
