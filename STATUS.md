@@ -4,13 +4,16 @@
 | Milestone | State |
 |---|---|
 | M0 evidence baseline | done |
-| M1 skeleton: import, licence audit, build repair, renames, U-6 inventory, publish guard, docs | done pending D1 (commit message, already applied) and D5 (commit of M1e by the user) |
-| M2 loader parity | planned |
-| M3 runtime parity | planned |
-| M4 title and menu drawn | planned |
-| M5 live match | planned |
-| M6 kickoff | planned |
-| M7 publish | planned |
+| M1 skeleton: import, licence audit, build repair, renames, inventory, publish guard, docs | done |
+| M2 loader parity | closed |
+| M3 runtime parity | closed |
+| M4 title and menu drawn | closed |
+| M5 live match | closed |
+| M6 kickoff | provisional pass: no post-kickoff fault in any run, two full matches played; the formal 3-of-3 run criterion is still open |
+| M6.5a launcher and settings app | done (Display, Keyboard, Controller, Audio and Online tabs; Install / Play / Settings / Exit launcher) |
+| M6.5b audio level | closed |
+| M6.5c FSR 4 and DLSS, graphics sliders | moved to after the first release; FSR 3.1 (on or off, four modes) is in the release |
+| M7 publish | in preparation: publish audit, history rewrite for the first commit, licence review, QA |
 
 ## Deferred
 

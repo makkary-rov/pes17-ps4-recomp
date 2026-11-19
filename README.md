@@ -6,6 +6,12 @@ This project approaches the PS4 executable by static recompilation of the PS4 x8
 
 No game files, keys or firmware are included or provided. You need your own legally obtained dump. This project is not affiliated with Konami or Sony. Trademarks belong to their owners.
 
+## Using it
+
+1. Build it (see BUILDING.md); the build produces `pes17launcher.exe`, `pes17settings.exe` and `pes17recomp.exe` in `out/`.
+2. Run the launcher. **Install** asks for the folder of your own PS4 game dump (the one with `eboot.bin`) and remembers it; **Play** starts the game; **Settings** opens the settings window (display, keyboard, controller, audio); **Exit** closes the launcher.
+3. Settings are kept in `pes17recomp.ini` next to the executables. Gameplay runs at 60 or 30 frames per second; pre-match cutscenes keep the game's own 30.
+
 ## Status
 
 See [STATUS.md](STATUS.md) for the milestone table.

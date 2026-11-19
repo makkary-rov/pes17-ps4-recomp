@@ -15,3 +15,8 @@ This project is not affiliated with Konami or Sony.
 - The DejaVu and Bitstream Vera font authors
 - The Dear ImGui project
 - The LibAtrac9 project
+
+## Artwork
+
+- The launcher's logo ("2017RECOMP") is original to this project, set in Arial Black, which is not shipped (the launcher uses the copy that comes with Windows).
+- The launcher tile pictures and the settings window background are AI-generated and are not photographs of real places; they are included under this project's licence.
