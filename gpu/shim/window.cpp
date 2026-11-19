@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // pes: SDL3 window for the Vulkan swapchain (X11, Wayland or Win32).
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -79,12 +80,26 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_VULKAN_BOOLEAN, true);
     const char* fullscreen = std::getenv("PES_FULLSCREEN");
+    // pes: display_mode=fullscreen (settings window): exclusive fullscreen at the monitor's native
+    // mode, minimised when it loses focus. Borderless stays SDL's desktop fullscreen (no mode set).
+    const bool exclusive = !fullscreen && PesSettings::Get().display_mode.load() == PesSettings::DisplayFullscreen;
+    if (exclusive) SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "1");
     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN,
-                           fullscreen ? fullscreen[0] == '1' : PesSettings::Get().fullscreen.load());
+                           !exclusive && (fullscreen ? fullscreen[0] == '1' : PesSettings::Get().fullscreen.load()));
     base_title = title;
     window = SDL_CreateWindowWithProperties(props);
     SDL_DestroyProperties(props);
     ASSERT_MSG(window, "Failed to create window: {}", SDL_GetError());
+    if (exclusive) {
+        const SDL_DisplayMode* native = SDL_GetDesktopDisplayMode(SDL_GetDisplayForWindow(window));
+        const bool ok = native && SDL_SetWindowFullscreenMode(window, native) && SDL_SetWindowFullscreen(window, true);
+        if (ok) std::printf("Display: exclusive fullscreen %dx%d @ %.0f Hz\n", native->w, native->h, native->refresh_rate);
+        else {
+            std::printf("Display: exclusive fullscreen unavailable (%s); borderless instead\n", SDL_GetError());
+            SDL_SetWindowFullscreenMode(window, nullptr);
+            SDL_SetWindowFullscreen(window, true);
+        }
+    }
 
     const char* driver = SDL_GetCurrentVideoDriver();
     const SDL_PropertiesID wp = SDL_GetWindowProperties(window);
