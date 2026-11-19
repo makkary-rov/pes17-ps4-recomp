@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The launcher's game logic (launcher/launcher_game.c): a game folder needs eboot.bin; Play's
-// arguments need the boot image and add the import aliases and content profile when present.
+// The launcher's game logic (launcher/launcher_game.c): a game folder needs eboot.bin; the prepared
+// files are all three; the preparation steps and Play's arguments are quoted correctly (spaces, a
+// drive root, a non-ASCII folder), need the boot image, and add the aliases and content profile when
+// present.
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,17 +23,14 @@ static void Touch(const char *path) {
 }
 
 int main(void) {
-    const char *base = "test_launcher_base";
+    const char *data = "test_launcher_data";
     const char *game = "test_launcher_game";
-    MKDIR(base);
-    MKDIR("test_launcher_base/verify");
-    MKDIR("test_launcher_base/verify/m2b");
-    MKDIR("test_launcher_base/verify/run1");
+    MKDIR(data);
     MKDIR(game);
     remove("test_launcher_game/eboot.bin");
-    remove("test_launcher_base/verify/m2b/boot-linked.bin");
-    remove("test_launcher_base/verify/m2b/import-aliases.txt");
-    remove("test_launcher_base/verify/run1/content.bin");
+    remove("test_launcher_data/boot-linked.bin");
+    remove("test_launcher_data/import-aliases.txt");
+    remove("test_launcher_data/content.bin");
 
     /* A folder without eboot.bin is not the game; with it, it is. */
     assert(PesLauncherIsGameDir(game) == 0);
@@ -39,30 +38,50 @@ int main(void) {
     Touch("test_launcher_game/eboot.bin");
     assert(PesLauncherIsGameDir(game) == 1);
 
+    /* Prepared only when all three files exist. */
+    assert(PesLauncherPrepared(data) == 0);
+    Touch("test_launcher_data/boot-linked.bin");
+    Touch("test_launcher_data/import-aliases.txt");
+    assert(PesLauncherPrepared(data) == 0);
+    Touch("test_launcher_data/content.bin");
+    assert(PesLauncherPrepared(data) == 1);
+
+    /* The three steps: script under root/scripts, game folder, title config (not for step 1), output. */
     char args[4096];
-    /* No boot image: Play cannot start. */
-    assert(PesLauncherPlayArgs(args, sizeof(args), base, game) == 0);
+    assert(PesLauncherStepArgs(0, args, sizeof(args), "C:/my repo", "C:/my data", "D:/games/CUSA04957") == 1);
+    assert(strcmp(args, " \"C:/my repo/scripts/prepare.py\" \"D:/games/CUSA04957\" --title \"C:/my repo/src/title/CUSA04957.json\" --out \"C:/my data\"") == 0);
+    assert(PesLauncherStepArgs(1, args, sizeof(args), "r", "d", "g") == 1);
+    assert(strstr(args, "content_profile.py") != NULL && strstr(args, "--title") == NULL);
+    assert(PesLauncherStepArgs(2, args, sizeof(args), "r", "d", "g") == 1 && strstr(args, "link_modules.py") != NULL);
+    assert(PesLauncherStepArgs(3, args, sizeof(args), "r", "d", "g") == 0 && PesLauncherStepArgs(-1, args, sizeof(args), "r", "d", "g") == 0);
+    assert(PesLauncherStepArgs(0, args, 20, "r", "d", "g") == 0);
+    assert(PesLauncherStepName(0)[0] && PesLauncherStepName(PES_LAUNCHER_STEPS)[0] == '\0');
 
-    /* The boot image alone: boot image and --app0, quoted. */
-    Touch("test_launcher_base/verify/m2b/boot-linked.bin");
-    assert(PesLauncherPlayArgs(args, sizeof(args), base, game) == 1);
-    assert(strcmp(args, "\"test_launcher_base/verify/m2b/boot-linked.bin\" --app0 \"test_launcher_game\"") == 0);
+    /* Play: the boot image, --app0, aliases and content profile. */
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, game) == 1);
+    assert(strcmp(args, " \"test_launcher_data/boot-linked.bin\" --app0 \"test_launcher_game\""
+                        " --import-aliases \"test_launcher_data/import-aliases.txt\""
+                        " --content-profile \"test_launcher_data/content.bin\"") == 0);
+    remove("test_launcher_data/import-aliases.txt");
+    remove("test_launcher_data/content.bin");
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, game) == 1 && strstr(args, "--import-aliases") == NULL);
 
-    /* With the aliases and the content profile they are added. */
-    Touch("test_launcher_base/verify/m2b/import-aliases.txt");
-    Touch("test_launcher_base/verify/run1/content.bin");
-    assert(PesLauncherPlayArgs(args, sizeof(args), base, game) == 1);
-    assert(strstr(args, " --import-aliases \"test_launcher_base/verify/m2b/import-aliases.txt\"") != NULL);
-    assert(strstr(args, " --content-profile \"test_launcher_base/verify/run1/content.bin\"") != NULL);
+    /* A game folder at a drive root: the trailing backslash is doubled, so the quote stays closed. */
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, "E:\\") == 1);
+    assert(strstr(args, "--app0 \"E:\\\\\"") != NULL);
+    /* A UTF-8 folder name passes through unchanged. */
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, "D:/J\xc3\xbcgos/CUSA04957") == 1);
+    assert(strstr(args, "\"D:/J\xc3\xbcgos/CUSA04957\"") != NULL);
 
-    /* Too small a buffer or no game folder: nothing. */
-    assert(PesLauncherPlayArgs(args, 20, base, game) == 0);
-    assert(PesLauncherPlayArgs(args, sizeof(args), base, "") == 0);
+    /* No boot image, a too-small buffer, or no game folder: nothing. */
+    remove("test_launcher_data/boot-linked.bin");
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, game) == 0);
+    Touch("test_launcher_data/boot-linked.bin");
+    assert(PesLauncherPlayArgs(args, 20, data, game) == 0);
+    assert(PesLauncherPlayArgs(args, sizeof(args), data, "") == 0);
 
     remove("test_launcher_game/eboot.bin");
-    remove("test_launcher_base/verify/m2b/boot-linked.bin");
-    remove("test_launcher_base/verify/m2b/import-aliases.txt");
-    remove("test_launcher_base/verify/run1/content.bin");
-    printf("PASS: launcher game folder check and Play arguments\n");
+    remove("test_launcher_data/boot-linked.bin");
+    printf("PASS: launcher game folder, preparation steps and Play arguments\n");
     return 0;
 }

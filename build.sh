@@ -123,6 +123,8 @@ if [[ ${1:-} == --test ]]; then
     out/settings-tone-test
     "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_launcher_game.c launcher/launcher_game.c -o out/launcher-game-test
     (cd out && ./launcher-game-test)
+    "${CXX:-clang++}" -std=c++20 -O2 -Wall -Wextra -Werror -Igpu/shim tests/test_readback_policy.cpp -o out/readback-policy-test
+    out/readback-policy-test
     "$CC" -std=c11 -O2 -Wall -Wextra -Werror -Ilauncher tests/test_settings_display_file.c launcher/settings_display_ini.c launcher/settings_ini.c launcher/settings_model.c launcher/settings_keys.c launcher/settings_pad.c -o out/settings-display-file-test
     out/settings-display-file-test
     "${CXX:-clang++}" -std=c++20 -O2 -UNDEBUG -Wall -Wextra -Werror -I. -Igpu -Igpu/shim tests/test_display_modes.cpp gpu/shim/pes_settings.cpp -o out/display-modes-test

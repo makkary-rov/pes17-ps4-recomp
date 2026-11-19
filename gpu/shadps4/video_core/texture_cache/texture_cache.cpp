@@ -10,6 +10,7 @@
 
 #include "pes_toggles.h"
 #include "pes_free_check.h"
+#include "pes_readback_policy.h"
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
@@ -201,23 +202,23 @@ void TextureCache::ProcessDownloadImages() {
     }
     std::unique_lock lk{download_images_mutex};
     downloads_queued.store(false, std::memory_order_relaxed);
-    // pes: small readbacks (<= 64 KiB, e.g. the game's 32x32 luminance pair, read every frame in
-    // gameplay) are asynchronous: the copy is queued and written into the game's memory when the
-    // GPU gets there, instead of waiting for the GPU to finish everything (Finish) twice a
-    // frame. The game alternates two such images, so it reads last frame's value anyway. Larger
-    // ones (the kit staging textures) stay synchronous. PES_SYNC_READBACK=1: all synchronous.
+    // pes: the small readback pair read every frame in gameplay (32x32, 64 bits, one layer; see
+    // pes_readback_policy.h) is asynchronous: the copy is queued and written into the game's memory
+    // when the GPU gets there, instead of waiting for the GPU to finish everything (Finish) twice a
+    // frame. Every other image, the kit staging textures included, stays synchronous.
+    // PES_SYNC_READBACK=1 makes all of them synchronous.
     static const bool all_sync = [] {
         const char* v = std::getenv("PES_SYNC_READBACK");
         const bool on = v && v[0] == '1';
-        std::printf("Readback: %s\n", on ? "all synchronous" : "small images (<= 64 KiB) asynchronous");
+        std::printf("Readback: %s\n", on ? "all synchronous" : "the 32x32 64-bit pair asynchronous");
         return on;
     }();
     for (const ImageId image_id : download_images) {
         NoteDownload(image_id);
         const auto& info = slot_images[image_id].info;
-        const u64 bytes = u64(info.pitch) * info.size.height * info.size.depth * info.resources.layers *
-                          (info.num_bits / 8);
-        DownloadImageMemory(image_id, all_sync || bytes > 64 * 1024);
+        const bool async = !all_sync && PesReadback::MayBeAsync(info.size.width, info.size.height, info.size.depth,
+                                                                info.resources.layers, info.num_bits);
+        DownloadImageMemory(image_id, !async);
     }
     download_images.clear();
 }

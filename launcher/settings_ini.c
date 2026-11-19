@@ -98,11 +98,16 @@ static int CopyKept(const char *old, FILE *out, int drop_method, int drop_bindin
     return 1;
 }
 
-/* Replaces the file with the temporary one. Returns 1 on success. */
+/* Replaces the file with the temporary one in one step, so a crash or a failure never leaves the settings
+ * missing: the old file stays until the new one is in place. Returns 1 on success. */
 static int SwapInFile(const char *path, const char *tmp) {
-    remove(path);
-    if (rename(tmp, path) != 0) { remove(tmp); return 0; }
-    return 1;
+#ifdef _WIN32
+    const int ok = MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    const int ok = rename(tmp, path) == 0; /* POSIX rename replaces atomically */
+#endif
+    if (!ok) remove(tmp);
+    return ok;
 }
 
 int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {

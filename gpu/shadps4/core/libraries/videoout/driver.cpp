@@ -815,9 +815,11 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
         // pes: with early release nothing else holds the game to the display: it advances one
         // simulation step per frame, so frames queued faster than they are presented make the
         // game run fast. Keep at most one flip waiting for the present thread (the game is at
-        // most a frame ahead, as with the buffer wait on PS4).
+        // most a frame ahead, as with the buffer wait on PS4). The wait is bounded: if the present
+        // thread has stopped or is paused (shutdown, a closed port), the flip goes in after 250 ms
+        // instead of blocking the game, or the interrupt lock an EOP flip is submitted under, forever.
         if (EarlyFlipRelease() && index != -1) {
-            taken_cv.wait(lock, [this] { return requests.empty(); });
+            taken_cv.wait_for(lock, std::chrono::milliseconds(250), [this] { return requests.empty(); });
         }
         requests.push({
             .frame = frame,
