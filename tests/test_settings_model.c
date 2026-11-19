@@ -29,6 +29,11 @@ int main(void) {
     assert(c.quality == PES_QUALITY_HIGH);
     assert(c.vsync == 1);
     assert(c.fps_ingame == 60 && c.fps_replay == 30);
+    PesDisplaySettings fast = PesDisplayDefaults();
+    fast.fps_ingame = 120;
+    fast.fps_replay = 120;
+    fast = PesDisplayClamp(fast);
+    assert(fast.fps_ingame == 120 && fast.fps_replay == 30); /* 120 for gameplay only */
     assert(c.audio_buffer == 1);
     assert(c.motion_blur == 100 && c.fsr_preset == PES_FSR_QUALITY && c.fsr_enabled == 1);
     PesDisplaySettings good = {PES_MODE_FULLSCREEN, 0, PES_QUALITY_LOW, 0, 30, 60, 8, 75, 1, PES_FSR_BALANCED};

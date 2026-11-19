@@ -18,6 +18,10 @@
 #include <SDL3/SDL.h>
 #include "../gpu/shim/input/controller_backends.h"
 #include <sys/stat.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h> /* VirtualQuery (guest heap report) */
+#endif
 
 #define ERR_INVALID_ARG ((int32_t)0x80920001)
 #define ERR_INVALID_HANDLE ((int32_t)0x80920003)
@@ -164,7 +168,19 @@ static void report_guest_heap(void) {
     if (!enabled || now-last<5000000) return;
     last=now;
     const uint8_t *stub=(const uint8_t *)(0x800000000ull+0x56e0000+0x1f8c0);
-    if (stub[0]!=0xff || stub[1]!=0x25) return; /* another libc */
+#ifdef _WIN32
+    /* Another boot image puts libc elsewhere (the linked image: +0x4bb0000), so this address can be
+     * unmapped: check it is committed code before reading, else turn the report off. */
+    {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery(stub,&mbi,sizeof(mbi)) || mbi.State!=MEM_COMMIT || (mbi.Protect&(PAGE_NOACCESS|PAGE_GUARD))) {
+            printf("Guest heap: libc not at the expected address; heap report off\n");
+            enabled=0;
+            return;
+        }
+    }
+#endif
+    if (stub[0]!=0xff || stub[1]!=0x25) { enabled=0; return; } /* another libc */
     ABI int (*stats)(MallocManagedSize *)=(ABI int (*)(MallocManagedSize *))(uintptr_t)stub;
     MallocManagedSize m={.size=sizeof(m),.version=1};
     const int result=stats(&m);

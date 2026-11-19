@@ -847,6 +847,21 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
     // next vblank tick.
     const bool immediate_flips = frame_limit != 0 || EmulatorSettings.IsUncappedVblank();
 
+    // pes: vblank ticks per presented frame. The game picks its scene rate with the flip rate:
+    // 0 (60 FPS) in menus and gameplay, 1 (30 FPS) in cutscenes. The settings choose the rate of
+    // each: gameplay 30/60/120 (fps_ingame), cutscenes 30/60 (fps_replay). Other flip rates
+    // (20 FPS) keep the game's own pace. At the uncapped vblank the frame limiter paces instead.
+    const u32 vblank_hz = EmulatorSettings.GetVblankFrequency();
+    const auto present_interval = [&]() -> u32 {
+        if (EmulatorSettings.IsUncappedVblank()) return u32(main_port.flip_rate + 1);
+        const int rate = main_port.flip_rate;
+        const long target = rate == 0 ? PesFpsInGame() : rate == 1 ? PesFpsCutscene() : 60 / (rate + 1);
+        const u32 ticks = target > 0 ? u32(vblank_hz / u32(target)) : 1u;
+        return ticks > 0 ? ticks : 1u;
+    };
+    std::printf("VideoOut: gameplay %ld FPS, cutscenes %ld FPS (vblank %u Hz)\n", PesFpsInGame(),
+                PesFpsCutscene(), vblank_hz);
+
     while (!token.stop_requested()) {
         timer.Start();
         // Vblank wakes must retain their phase too: a producer waiting for
@@ -869,7 +884,8 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         const auto now = std::chrono::steady_clock::now();
         update_limit();
         const bool flip_slot = limiter.Due(now);
-        if (flip_slot && vblank_status.count % (main_port.flip_rate + 1) == 0) {
+        const u32 interval = present_interval();
+        if (flip_slot && vblank_status.count % interval == 0) {
             const auto request = receive_request();
             if (request) limiter.Presented(now);
             if (!request) {
@@ -912,7 +928,7 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
             main_port.vblank_cv.notify_all();
         }
 
-        if (!immediate_flips || main_port.flip_rate != 0) {
+        if (!immediate_flips || interval != 1) {
             timer.End();
             continue;
         }

@@ -131,8 +131,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "vsync") {
         v.vsync = i != 0;
     } else if (key == "fps_ingame") {
-        if (i == 60 || i == 30) v.fps_ingame = i;
-        else std::printf("Settings: fps_ingame must be 60 or 30, got '%s'\n", value.c_str());
+        if (i == 120 || i == 60 || i == 30) v.fps_ingame = i;
+        else std::printf("Settings: fps_ingame must be 120, 60 or 30, got '%s'\n", value.c_str());
     } else if (key == "fps_replay") {
         if (i == 60 || i == 30) v.fps_replay = i;
         else std::printf("Settings: fps_replay must be 60 or 30, got '%s'\n", value.c_str());
@@ -423,4 +423,5 @@ const char* UpscalerName(int upscaler) {
 
 // pes: the Display values the video core reads (emulator_settings.h).
 long PesFpsInGame() { return PesSettings::Get().fps_ingame.load(); }
+long PesFpsCutscene() { return PesSettings::Get().fps_replay.load(); }
 bool PesVsync() { return PesSettings::Get().vsync.load(); }

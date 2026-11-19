@@ -94,7 +94,7 @@ int PesIniLoadDisplay(const char *path, PesDisplaySettings *s) {
     if (PesIniLoadValue(path, "vsync", v, sizeof(v))) s->vsync = atoi(v) != 0;
     if (PesIniLoadValue(path, "fps_ingame", v, sizeof(v))) {
         const int fps = atoi(v);
-        if (fps == 60 || fps == 30) s->fps_ingame = fps;
+        if (fps == 120 || fps == 60 || fps == 30) s->fps_ingame = fps;
     }
     if (PesIniLoadValue(path, "fps_replay", v, sizeof(v))) {
         const int fps = atoi(v);

@@ -165,6 +165,20 @@ int main(void) {
     assert(strstr(text, "vsync=0\n") != NULL);
     free(text);
 
+    /* 120 FPS gameplay round-trips; cutscenes stay at most 60. */
+    got = PesDisplayDefaults();
+    got.fps_ingame = 120;
+    got.fps_replay = 60;
+    assert(PesIniSaveDisplay(path, got) == 1);
+    text = ReadFile(path);
+    assert(strstr(text, "fps_ingame=120\n") != NULL && strstr(text, "fps_replay=60\n") != NULL);
+    free(text);
+    PesDisplaySettings again = PesDisplayDefaults();
+    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_ingame == 120 && again.fps_replay == 60);
+    WriteFile(path, "fps_replay=120\n");
+    again = PesDisplayDefaults();
+    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_replay == 30); /* 120 is gameplay only */
+
     remove(path);
     printf("PASS: display settings written as the game reads them, read back, two kept values, other lines kept\n");
     return 0;

@@ -186,12 +186,15 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     /* Other settings: vertical sync, frame rates and motion blur (the PS4 native values). */
     GroupBox(p, L"Other settings", 16, 316, 718, 240);
     g_vsync = Make(p, L"BUTTON", L"Vertical sync", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 346, 300, 24, ID_VSYNC);
-    Make(p, L"STATIC", L"Frame rate in game", SS_LEFT, 40, 380, 200, 20, 0);
+    /* Gameplay (and menus) 30/60/120; cutscenes 30/60. The game itself runs gameplay at 60 and
+     * cutscenes at 30 (its flip rate); these replace each. */
+    Make(p, L"STATIC", L"Frame rate in gameplay", SS_LEFT, 40, 380, 200, 20, 0);
     g_fps_ingame = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 378, 120, 120, ID_FPS_INGAME);
-    Make(p, L"STATIC", L"Frame rate in replays", SS_LEFT, 40, 406, 200, 20, 0);
+    Make(p, L"STATIC", L"Frame rate in cutscenes", SS_LEFT, 40, 406, 200, 20, 0);
     g_fps_replay = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 404, 120, 120, ID_FPS_REPLAY);
-    SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"60");
     SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"30");
+    SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"60");
+    SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"120");
     SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"30");
     SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"60");
     Make(p, L"STATIC", L"Motion blur", SS_LEFT, 40, 448, 200, 20, 0);
@@ -232,7 +235,7 @@ void SettingsDisplaySetValues(PesDisplaySettings s) {
     SendMessageW(g_resolution, CB_SETCURSEL, s.resolution, 0);
     for (int i = 0; i < 3; ++i) SendMessageW(g_quality[i], BM_SETCHECK, i == s.quality ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_vsync, BM_SETCHECK, s.vsync ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendMessageW(g_fps_ingame, CB_SETCURSEL, s.fps_ingame == 60 ? 0 : 1, 0);
+    SendMessageW(g_fps_ingame, CB_SETCURSEL, s.fps_ingame == 30 ? 0 : s.fps_ingame == 120 ? 2 : 1, 0);
     SendMessageW(g_fps_replay, CB_SETCURSEL, s.fps_replay == 30 ? 0 : 1, 0);
     int blur_index = 4;
     for (int i = 0; i < PES_MOTION_BLUR_COUNT; ++i) if (PesMotionBlurSteps[i] == s.motion_blur) blur_index = i;
@@ -249,7 +252,11 @@ PesDisplaySettings SettingsDisplayGetValues(void) {
     s.resolution = (int)SendMessageW(g_resolution, CB_GETCURSEL, 0, 0);
     for (int i = 0; i < 3; ++i) if (SendMessageW(g_quality[i], BM_GETCHECK, 0, 0) == BST_CHECKED) s.quality = i;
     s.vsync = SendMessageW(g_vsync, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    s.fps_ingame = SendMessageW(g_fps_ingame, CB_GETCURSEL, 0, 0) == 0 ? 60 : 30;
+    {
+        static const int kGameplay[3] = {30, 60, 120};
+        const int pick = (int)SendMessageW(g_fps_ingame, CB_GETCURSEL, 0, 0);
+        s.fps_ingame = pick >= 0 && pick < 3 ? kGameplay[pick] : 60;
+    }
     s.fps_replay = SendMessageW(g_fps_replay, CB_GETCURSEL, 0, 0) == 0 ? 30 : 60;
     const int blur = (int)SendMessageW(g_motion_blur, CB_GETCURSEL, 0, 0);
     s.motion_blur = blur >= 0 && blur < PES_MOTION_BLUR_COUNT ? PesMotionBlurSteps[blur] : 0;

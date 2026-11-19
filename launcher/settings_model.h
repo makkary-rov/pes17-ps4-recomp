@@ -14,8 +14,8 @@ typedef struct {
     int resolution;      /* index into PesResolutions */
     int quality;         /* enum PesQuality: saved only, no effect yet */
     int vsync;           /* 0 or 1; on by default (PS4 default) */
-    int fps_ingame;      /* 60 or 30 */
-    int fps_replay;      /* 60 or 30 */
+    int fps_ingame;      /* gameplay and menus: 30, 60 or 120 */
+    int fps_replay;      /* cutscenes: 30 or 60 (key fps_replay) */
     int audio_buffer;    /* 1..8: saved only, no effect yet */
     int motion_blur;     /* percent: 0 (OFF), 25, 50, 75 or 100 (FULL) */
     int fsr_enabled;     /* FSR 3.1 upscaler on (1) or off (0) */
