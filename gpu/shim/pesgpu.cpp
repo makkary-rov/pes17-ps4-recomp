@@ -305,7 +305,12 @@ extern "C" int pesgpu_init(const PesGpuConfig* config) {
 #endif
     Core::Emulator::FillElfInfo(*config);
     const std::string title = config->title ? config->title : "pes17recomp";
-    const s32 width = config->width, height = config->height;
+    // pes: the window opens at the resolution chosen in the settings (output_res); the full-screen
+    // modes take the display's size anyway.
+    const int output = PesSettings::Get().output_res.load();
+    const bool chosen = output >= 0 && output < PesSettings::OutputCount;
+    const s32 width = chosen ? PesSettings::OutputWidths[output] : config->width;
+    const s32 height = chosen ? PesSettings::OutputHeights[output] : config->height;
     g_window_thread = std::thread([title, width, height] {
         Common::SetCurrentThreadName("pes:window");
         auto* window = new Frontend::WindowSDL(width, height, title.c_str());
