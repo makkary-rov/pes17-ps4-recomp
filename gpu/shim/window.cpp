@@ -68,6 +68,18 @@ static void ApplyWindowIcon(void* hwnd_ptr, void*& big_storage, void*& small_sto
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
     pes_controller_backends();
+    // pes: pad_input (settings window): XInput keeps SDL's XInput, RawInput and HIDAPI pads and
+    // leaves DirectInput out; DirectInput turns XInput and RawInput off so the DirectInput driver
+    // takes the pads. Hints set in the environment win (SDL reads them first).
+    if (PesSettings::Get().pad_input.load() == 1) {
+        SDL_SetHintWithPriority(SDL_HINT_XINPUT_ENABLED, "0", SDL_HINT_DEFAULT);
+        SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_RAWINPUT, "0", SDL_HINT_DEFAULT);
+        SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_DIRECTINPUT, "1", SDL_HINT_DEFAULT);
+        std::printf("Gamepads: DirectInput\n");
+    } else {
+        SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_DIRECTINPUT, "0", SDL_HINT_DEFAULT);
+        std::printf("Gamepads: XInput\n");
+    }
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         UNREACHABLE_MSG("Failed to initialize SDL video: {}", SDL_GetError());
     }

@@ -136,6 +136,10 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "fps_replay") {
         if (i == 60 || i == 30) v.fps_replay = i;
         else std::printf("Settings: fps_replay must be 60 or 30, got '%s'\n", value.c_str());
+    } else if (key == "pad_input") {
+        if (value == "xinput") v.pad_input = 0;
+        else if (value == "directinput") v.pad_input = 1;
+        else std::printf("Settings: unknown pad_input '%s' (xinput or directinput)\n", value.c_str());
     } else if (key == "audio_buffer") {
         v.audio_buffer = std::clamp(i, 1, 8);
     } else if (key == "quality") {

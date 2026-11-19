@@ -1,14 +1,16 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* The Controller tab of the settings window (M6.5a): the gamepad bindings around the PS4 controller
- * picture. Clicking a binding button waits for a button press on the controller (polled through
- * XInput for up to eight seconds); Esc cancels. The analog stick directions are shown, not bindable.
- * The bindings and their rules live in settings_pad (tested on every platform). The layout follows the
- * Keyboard tab and is estimated from the reference screenshots; it needs a visual check. */
+ * picture. XInput (the default) keeps the standard mapping; DirectInput lets each button be set.
+ * Clicking a binding button waits up to eight seconds for a press on the first gamepad, read through
+ * SDL with the same backend the game will use (pad_input: XInput, or DirectInput), so the captured
+ * name is the SDL gamepad name the game reads. Esc cancels. The analog stick directions are shown,
+ * not bindable. The bindings and their rules live in settings_pad (tested on every platform). */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
+#include <SDL3/SDL.h>
 #include "settings_controller.h"
 #include "settings_keys.h"
 #include "settings_pad.h"
@@ -24,40 +26,84 @@
 #define ID_REVERT 800
 #define ID_PAD_DIRECT 900
 #define ID_PAD_XINPUT 901
+#define ID_DEVICE 902
 #define CAPTURE_TIMER 7
 #define CAPTURE_MS 8000
+#define TRIGGER_DOWN 16000 /* of 32767: a trigger pulled past half counts as a press */
 
-/* XInput's state layout (XINPUT_STATE), loaded from the system library at run time. */
-typedef struct { WORD buttons; BYTE left_trigger, right_trigger; SHORT lx, ly, rx, ry; } PadState;
-typedef struct { DWORD packet; PadState pad; } XState;
-typedef DWORD (WINAPI *GetStateFn)(DWORD, XState *);
+/* Pressed controls: one bit per SDL gamepad button, then the two triggers. */
+typedef unsigned long long PadBits;
+#define BIT_LEFT_TRIGGER ((PadBits)1 << SDL_GAMEPAD_BUTTON_COUNT)
+#define BIT_RIGHT_TRIGGER ((PadBits)1 << (SDL_GAMEPAD_BUTTON_COUNT + 1))
 
 static const wchar_t *kControllerClass = L"PesSettingsController";
-static HWND g_page, g_binds[PES_PAD_SLOTS], g_direct_radio, g_xinput_radio;
+static HWND g_page, g_binds[PES_PAD_SLOTS], g_direct_radio, g_xinput_radio, g_device;
 static char g_pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX];
 static int g_method = PES_PAD_XINPUT; /* XInput is the default: the fixed standard mapping */
 static int g_capture = -1;
 static DWORD g_capture_deadline;
-static XState g_baseline;
-static GetStateFn g_get_state;
-static int g_xinput_tried;
+static PadBits g_baseline;
+static int g_sdl_backend = -1; /* the backend SDL's gamepad subsystem was started with, -1 none */
+static SDL_Gamepad *g_gamepad;
 
-static GetStateFn LoadXInput(void) {
-    if (g_xinput_tried) return g_get_state;
-    g_xinput_tried = 1;
-    static const wchar_t *names[] = {L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"};
-    for (int i = 0; i < 3 && !g_get_state; ++i) {
-        HMODULE lib = LoadLibraryW(names[i]);
-        if (lib) g_get_state = (GetStateFn)(void *)GetProcAddress(lib, "XInputGetState");
-    }
-    return g_get_state;
+/* Starts (or restarts) SDL's gamepads with the backend of the chosen method, as the game does. */
+static void StartPads(void) {
+    if (g_sdl_backend == g_method) return;
+    if (g_gamepad) { SDL_CloseGamepad(g_gamepad); g_gamepad = NULL; }
+    if (g_sdl_backend >= 0) SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+    const int direct = g_method == PES_PAD_DIRECTINPUT;
+    SDL_SetHint(SDL_HINT_XINPUT_ENABLED, direct ? "0" : "1");
+    SDL_SetHint(SDL_HINT_JOYSTICK_RAWINPUT, direct ? "0" : "1");
+    SDL_SetHint(SDL_HINT_JOYSTICK_DIRECTINPUT, direct ? "1" : "0");
+    g_sdl_backend = SDL_InitSubSystem(SDL_INIT_GAMEPAD) ? g_method : -1;
 }
 
-/* Reads controller 0; returns 0 if none is connected. */
-static int ReadPad(XState *state) {
-    GetStateFn get = LoadXInput();
-    if (!get) return 0;
-    return get(0, state) == 0;
+/* The first connected gamepad, opened on demand; NULL if none. */
+static SDL_Gamepad *Pad(void) {
+    StartPads();
+    if (g_sdl_backend < 0) return NULL;
+    SDL_UpdateGamepads();
+    if (g_gamepad && SDL_GamepadConnected(g_gamepad)) return g_gamepad;
+    if (g_gamepad) { SDL_CloseGamepad(g_gamepad); g_gamepad = NULL; }
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    if (ids && count > 0) g_gamepad = SDL_OpenGamepad(ids[0]);
+    SDL_free(ids);
+    return g_gamepad;
+}
+
+static PadBits Pressed(SDL_Gamepad *pad) {
+    PadBits bits = 0;
+    for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
+        if (SDL_GetGamepadButton(pad, (SDL_GamepadButton)b)) bits |= (PadBits)1 << b;
+    }
+    if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > TRIGGER_DOWN) bits |= BIT_LEFT_TRIGGER;
+    if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > TRIGGER_DOWN) bits |= BIT_RIGHT_TRIGGER;
+    return bits;
+}
+
+/* The SDL gamepad name of the first control in bits, or NULL. */
+static const char *NameOf(PadBits bits) {
+    for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; ++b) {
+        if (bits & ((PadBits)1 << b)) return SDL_GetGamepadStringForButton((SDL_GamepadButton)b);
+    }
+    if (bits & BIT_LEFT_TRIGGER) return "lefttrigger";
+    if (bits & BIT_RIGHT_TRIGGER) return "righttrigger";
+    return NULL;
+}
+
+/* Shows the connected pad's name (or the method) in the Device box. */
+static void ShowDevice(void) {
+    if (!g_device) return;
+    SDL_Gamepad *pad = Pad();
+    const char *name = pad ? SDL_GetGamepadName(pad) : NULL;
+    wchar_t text[128];
+    if (name) swprintf(text, 128, L"%S", name);
+    else wcscpy(text, g_method == PES_PAD_DIRECTINPUT ? L"DirectInput: no controller" : L"XInput: no controller");
+    SendMessageW(g_device, CB_RESETCONTENT, 0, 0);
+    SendMessageW(g_device, CB_ADDSTRING, 0, (LPARAM)text);
+    SendMessageW(g_device, CB_SETCURSEL, 0, 0);
 }
 
 static void SetText(int slot) {
@@ -85,6 +131,7 @@ static void ApplyMethod(void) {
     for (int s = 0; s < PES_PAD_SLOTS; ++s) EnableWindow(g_binds[s], PesPadBindable(s) && manual);
     SendMessageW(g_direct_radio, BM_SETCHECK, manual ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_xinput_radio, BM_SETCHECK, manual ? BST_UNCHECKED : BST_CHECKED, 0);
+    ShowDevice();
 }
 
 static void StopCapture(HWND page) {
@@ -95,13 +142,13 @@ static void StopCapture(HWND page) {
 }
 
 static void StartCapture(HWND page, int slot) {
-    XState now;
-    if (!ReadPad(&now)) {
+    SDL_Gamepad *pad = Pad();
+    if (!pad) {
         MessageBoxW(page, L"Connect a controller to set this button.", L"Settings", MB_OK | MB_ICONINFORMATION);
         return;
     }
     StopCapture(page);
-    g_baseline = now; /* buttons already held do not count */
+    g_baseline = Pressed(pad); /* controls already held do not count */
     g_capture = slot;
     g_capture_deadline = GetTickCount() + CAPTURE_MS;
     SetTimer(page, CAPTURE_TIMER, 30, NULL);
@@ -114,19 +161,18 @@ static void OnTimer(HWND page) {
         StopCapture(page);
         return;
     }
-    XState now;
-    if (!ReadPad(&now)) return;
-    /* New presses only: a button or a trigger that was not down at the start. */
-    const WORD fresh = now.pad.buttons & ~g_baseline.pad.buttons;
-    const unsigned left = now.pad.left_trigger > 127 && g_baseline.pad.left_trigger <= 127 ? 255 : 0;
-    const unsigned right = now.pad.right_trigger > 127 && g_baseline.pad.right_trigger <= 127 ? 255 : 0;
-    const char *name = PesPadNameFromXInput(fresh, left, right);
-    if (name[0]) {
+    SDL_Gamepad *pad = Pad();
+    if (!pad) return;
+    const PadBits now = Pressed(pad);
+    const char *name = NameOf(now & ~g_baseline); /* new presses only */
+    g_baseline &= now;                             /* a held control that is let go counts again */
+    if (name) {
         PesPadBind(g_pads, g_capture, name);
         StopCapture(page);
         RefreshAll();
     }
 }
+
 
 static LRESULT CALLBACK ControllerPageProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
@@ -212,9 +258,8 @@ void SettingsControllerCreate(HWND parent, HFONT font) {
     g_direct_radio = Make(p, L"BUTTON", L"DirectInput", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 446, 36, 120, 22, ID_PAD_DIRECT);
     g_xinput_radio = Make(p, L"BUTTON", L"XInput", BS_AUTORADIOBUTTON, 594, 36, 120, 22, ID_PAD_XINPUT);
     Make(p, L"STATIC", L"Device", SS_LEFT, 0, 72, 90, 20, 0);
-    HWND device = Make(p, L"COMBOBOX", L"XInput controller", CBS_DROPDOWNLIST | WS_TABSTOP, 100, 68, 629, 120, 0);
-    SendMessageW(device, CB_ADDSTRING, 0, (LPARAM)L"XInput controller");
-    SendMessageW(device, CB_SETCURSEL, 0, 0);
+    /* The connected pad's name (filled by ApplyMethod through ShowDevice). */
+    g_device = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 100, 68, 629, 120, ID_DEVICE);
 
     Column(p, kLeft, 21, 86);
     Column(p, kRight, 548, 614);

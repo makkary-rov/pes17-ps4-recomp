@@ -101,6 +101,9 @@ struct Values {
     /// Saved only, no effect yet (user decision): audio buffer 1..8, quality 0 low, 1 medium, 2 high.
     std::atomic<int> audio_buffer{1};
     std::atomic<int> quality{2};
+    /// Gamepad backend (settings window, Controller tab): 0 XInput (default), 1 DirectInput. Read
+    /// before the gamepad subsystem starts (window.cpp).
+    std::atomic<int> pad_input{0};
     /// Live resolution and preset changes (run.sh): 0 off by default (startup patch, fastest
     /// on the Steam Deck and older GPUs), -1 auto (strong discrete GPUs), 1 on. On restart.
     std::atomic<int> live_resolution{0};
