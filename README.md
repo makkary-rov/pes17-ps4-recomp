@@ -1,6 +1,6 @@
 # PES 2017 PS4 recompilation (PC)
 
-This project approaches the PS4 executable by static recompilation of the PS4 x86-64 code, run on a high-level emulation (HLE) runtime written in C, with a Vulkan renderer derived from shadPS4 for graphics.
+This project runs the PS4 build of a 2017 football game on Windows. It is not a source-code recompilation and not an emulator of the whole console: it loads the game's own x86-64 code natively and replaces the PS4 system libraries with a small high-level runtime written in C, with a Vulkan renderer derived from shadPS4 for graphics.
 
 ## Disclaimer
 
@@ -8,8 +8,8 @@ No game files, keys or firmware are included or provided. You need your own lega
 
 ## Using it
 
-1. Build it (see BUILDING.md); the build produces `pes17launcher.exe`, `pes17settings.exe` and `pes17recomp.exe` in `out/`.
-2. Run the launcher. **Install** asks for the folder of your own PS4 game dump (the one with `eboot.bin`) and remembers it; **Play** starts the game; **Settings** opens the settings window (display, keyboard, controller, audio); **Exit** closes the launcher.
+1. Build it (see BUILDING.md); the build produces `pes17launcher.exe`, `pes17settings.exe` and `pes17recomp.exe` in `out/`. You also need Python 3 (no extra packages) for the one-time preparation below.
+2. Run the launcher. **Install** asks for the folder of your own PS4 game dump (the one with `eboot.bin`), remembers it, and prepares the game once (a few minutes; the three Python scripts in `scripts/` write their results to `game-data/` next to the launcher, with a log in `game-data/prepare.log`). **Play** starts the game (it prepares first if that has not been done); **Settings** opens the settings window (display, keyboard, controller, audio); **Exit** closes the launcher.
 3. Settings are kept in `pes17recomp.ini` next to the executables. Gameplay runs at 60 or 30 frames per second; pre-match cutscenes keep the game's own 30.
 
 ## Status

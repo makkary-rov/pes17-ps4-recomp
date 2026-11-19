@@ -72,6 +72,27 @@ def r0_hits(rel, text, allow):
     return hits
 
 
+# Personal addresses stay out of our own files: only the project identity (noreply@example.invalid) is
+# allowed. Vendored code keeps its authors' copyright lines, and licence texts name their authors.
+EMAIL = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+')
+EMAIL_OK = 'example.invalid'
+EMAIL_SERVICE = 'noreply@anthropic.com'  # the co-author trailer's service address, not a person
+EMAIL_EXEMPT = ('gpu/shadps4/', 'gpu/third_party/', 'third_party/', 'licenses/')
+IDENTITY = 'noreply@example.invalid'
+
+
+def email_hits(rel, text):
+    if rel.lower().startswith(EMAIL_EXEMPT):
+        return []
+    hits = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for match in EMAIL.finditer(line):
+            address = match.group(0).lower()
+            if not (address.endswith('@' + EMAIL_OK) or address == EMAIL_SERVICE):
+                hits.append((lineno, match.group(0)))
+    return hits
+
+
 def parse_allowlist(md):
     allow = set()
     inside = False
@@ -110,6 +131,12 @@ def commit_messages():
     return commits
 
 
+def commit_identities():
+    out = subprocess.run(["git", "log", "--all", "--format=%H%x1f%ae%x1f%ce"], cwd=ROOT,
+                         stdin=subprocess.DEVNULL, capture_output=True, check=True).stdout
+    return [tuple(line.split("")) for line in out.decode("utf-8", "replace").splitlines() if line.strip()]
+
+
 def main():
     allow_path = ROOT / "docs" / "R0-ALLOWLIST.md"
     allow = parse_allowlist(allow_path.read_text(encoding="utf-8")) if allow_path.exists() else set()
@@ -135,9 +162,16 @@ def main():
             for lineno, _ in r0_hits(rel, text, allow):
                 lines.append(f"FAIL r0 {rel}:{lineno}")
                 fails += 1
+            for lineno, _ in email_hits(rel, text):
+                lines.append(f"FAIL email {rel}:{lineno}")
+                fails += 1
     for sha, message in commit_messages():
         if P.search(message):
             lines.append(f"FAIL commit-message {sha[:12]}")
+            fails += 1
+    for sha, author, committer in commit_identities():
+        if author != IDENTITY or committer != IDENTITY:
+            lines.append(f"FAIL identity {sha[:12]}")
             fails += 1
     for line in lines:
         print(line)

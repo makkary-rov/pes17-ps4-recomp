@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 200 BITMAP "assets/controller_pad.bmp"
 210 BITMAP "assets/icon_00.bmp"
 211 BITMAP "assets/icon_01.bmp"

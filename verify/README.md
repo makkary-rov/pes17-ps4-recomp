@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # verify/
 
 ## verify_M2.ps1 (milestone M2 check)

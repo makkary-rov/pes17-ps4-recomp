@@ -19,4 +19,12 @@ Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong
 
 The launcher and settings window art is this project's own: the logo is an original wordmark, the button icons are drawn by `tools/art/make_settings_art.py`, the gamepad picture, the tile pictures and the background were supplied by the project owner (the pictures are AI-generated). No console maker's artwork, product photo or logo and nothing from the game's artwork is used or shipped.
 
+## Game-derived information (decision D6)
+
+| Allowed in this repository | Not allowed |
+|---|---|
+| guest addresses and lengths; SHA-256 hashes of original bytes at a site; replacement bytes we write; function addresses and our own description of what they do; import names from public sources | original game bytes (even short signatures); decompiled or disassembled listings; tables generated from the game's binary (they are produced locally by the scripts and git-ignored); game files, keys, saves |
+
+Every game-specific patch has a record in `docs/patch-records.md`.
+
 This document is not legal advice; a licence review is recommended.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-/* Minimal x86-64 native loader experiment. Not a PS4 emulator or game port. */
+/* Loader: maps the game's own x86-64 code and starts it natively on the C runtime (src/runtime*.c) and the GPU library (gpu/). Not a whole-console emulator. */
 #define _GNU_SOURCE
 #include <stdarg.h>
 #include <stdint.h>

@@ -11,3 +11,14 @@ LibAtrac9 (submodule, fetched, not in tree) - MIT
 magic_enum (FetchContent) - MIT
 miniz (FetchContent) - MIT
 xbyak (FetchContent) - BSD-3-Clause
+
+Libraries the programs link from the MSYS2 CLANG64 packages (installed by the builder, not in this tree):
+SDL3 - zlib
+Vulkan loader and headers - Apache-2.0
+FFmpeg (libavcodec, libavformat, libavutil, libswscale, libswresample) - LGPL-2.1-or-later; GPL-2.0-or-later or GPL-3.0 if the installed package was configured with GPL components (check the package)
+fmt - MIT
+xxHash - BSD-2-Clause
+Zydis / Zycore - MIT
+Boost (headers) - BSL-1.0
+Vulkan Memory Allocator and robin-map - MIT
+libc++ and libunwind (LLVM runtime) - Apache-2.0 with LLVM exceptions

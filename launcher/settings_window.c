@@ -2,7 +2,7 @@
 /* Settings window shell (M6.5a step A4): a fixed-size window with the five tabs (Display, Keyboard,
  * Controller, Audio, Online; Specifications and Support are skipped by decision), OK and Cancel.
  * The tab contents are added in the next steps. Size and placement follow the reference screenshots
- * in the reference screenshots (800 x 747 including the title bar); the window never resizes. */
+ * in the reference screenshots of the original settings window (800 x 747 including the title bar); the window never resizes. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commctrl.h>

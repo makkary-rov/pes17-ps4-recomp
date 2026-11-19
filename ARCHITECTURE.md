@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # Architecture
 
-The project has three layers. Game files are supplied by the user at run time and are never part of the repository.
+The project runs the PS4 build of a 2017 football game on Windows. It is not a source-code recompilation and not a whole-console emulator: the loader maps the game's own x86-64 code and starts it natively, the PS4 system libraries it calls are replaced by a high-level runtime written in C, and a Vulkan renderer derived from shadPS4 draws the frames. The project has three layers. Game files are supplied by the user at run time and are never part of the repository.
 
 ## Loader (`src/main.c`, `scripts/prepare.py`, `scripts/link_*`)
 

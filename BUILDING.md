@@ -86,7 +86,7 @@ game directory given with `--app0`, or lies inside it or inside its `CUSA` paren
 
 `./build.sh` produces three programs in `out/` (Windows):
 
-- `pes17launcher.exe`: Install (choose the game folder; saved as `game_dir`), Play, Settings, Exit.
+- `pes17launcher.exe`: Install (choose the game folder, saved as `game_dir`; it then prepares the game once with the Python scripts `scripts/prepare.py`, `content_profile.py` and `link_modules.py`, results in `game-data/` next to the launcher, log in `game-data/prepare.log`), Play, Settings, Exit. The one-time preparation needs Python 3 on `PATH` (no extra packages).
 - `pes17settings.exe`: the settings window (Display, Keyboard, Controller, Audio, Online).
 - `pes17recomp.exe`: the game loader. The launcher starts it; to start it by hand see the Play arguments in `launcher/launcher_game.c`.
 

@@ -34,6 +34,25 @@ class NameTests(unittest.TestCase):
         self.assertEqual(ap.PENDING, {})
 
 
+class EmailTests(unittest.TestCase):
+    def test_personal_address_in_own_file_is_found(self):
+        hits = ap.email_hits('gpu/patches/a.patch', 'From: someone <person' + '@mail.example.com>\n')
+        self.assertEqual([h[0] for h in hits], [1])
+
+    def test_project_identity_and_service_address_are_allowed(self):
+        self.assertEqual(ap.email_hits('docs/x.md', 'noreply@example.invalid\n'), [])
+        self.assertEqual(ap.email_hits('docs/x.md', 'Co-Authored-By: X <noreply@anthropic.com>\n'), [])
+
+    def test_vendored_and_licence_files_are_exempt(self):
+        text = 'Copyright 2012 Someone <person' + '@mail.example.com>\n'
+        for rel in ('gpu/shadps4/common/sha1.h', 'gpu/third_party/x/y.h', 'LICENSES/upstream/a.md'):
+            with self.subTest(rel=rel):
+                self.assertEqual(ap.email_hits(rel, text), [])
+
+    def test_identity_constant(self):
+        self.assertEqual(ap.IDENTITY, 'noreply@example.invalid')
+
+
 class SizeTests(unittest.TestCase):
     MIB2 = 2 << 20
 
