@@ -4,7 +4,7 @@ This project approaches the PS4 executable by static recompilation of the PS4 x8
 
 ## Disclaimer
 
-No game files, keys or firmware are included or provided. You need your own legally obtained dump. This project is not affiliated with Konami or Sony. Trademarks belong to their owners.
+No game files, keys or firmware are included or provided. You need your own legally obtained dump. Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with. This project is not affiliated with or endorsed by them.
 
 ## Using it
 

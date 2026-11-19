@@ -1,6 +1,6 @@
 # Credits
 
-This project is not affiliated with Konami or Sony.
+This project is not affiliated with or endorsed by Konami or Sony. Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with.
 
 - The authors of the upstream performance-stability-v2 PC port project
 - The shadPS4 project
