@@ -3,10 +3,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
+/* PES_CONFIG, else pes17recomp.ini next to this executable (the game uses the same rule, so both
+ * read the same file whatever the working directory). Off Windows: the working directory. */
 const char *PesConfigPath(void) {
     const char *env = getenv("PES_CONFIG");
-    return env && env[0] ? env : "pes17recomp.ini";
+    if (env && env[0]) return env;
+#ifdef _WIN32
+    static char path[1024];
+    if (!path[0]) {
+        const DWORD n = GetModuleFileNameA(NULL, path, sizeof(path));
+        char *cut = n > 0 && n < sizeof(path) ? strrchr(path, '\\') : NULL;
+        if (cut && (size_t)(cut - path) + 1 + sizeof("pes17recomp.ini") <= sizeof(path)) strcpy(cut + 1, "pes17recomp.ini");
+        else strcpy(path, "pes17recomp.ini");
+    }
+    return path;
+#else
+    return "pes17recomp.ini";
+#endif
 }
 
 /* Which slot a line belongs to: key.<input>= (any slot) or pad.<input>= (bindable slots only).
@@ -81,7 +99,7 @@ static int CopyKept(const char *old, FILE *out, int drop_method, int drop_bindin
 }
 
 /* Replaces the file with the temporary one. Returns 1 on success. */
-static int ReplaceFile(const char *path, const char *tmp) {
+static int SwapInFile(const char *path, const char *tmp) {
     remove(path);
     if (rename(tmp, path) != 0) { remove(tmp); return 0; }
     return 1;
@@ -110,7 +128,7 @@ int PesIniSaveBindings(const char *path, const int keys[PES_PAD_SLOTS], const ch
     }
     const int ok = fclose(out) == 0;
     if (!ok) { remove(tmp); return 0; }
-    return ReplaceFile(path, tmp);
+    return SwapInFile(path, tmp);
 }
 
 int PesIniLoadBindings(const char *path, int keys[PES_PAD_SLOTS], char pads[PES_PAD_SLOTS][PES_PAD_NAME_MAX]) {
@@ -175,7 +193,7 @@ int PesIniSavePadMethod(const char *path, int method) {
     fprintf(out, "pad_input=%s\n", method == PES_PAD_DIRECTINPUT ? "directinput" : "xinput");
     const int ok = fclose(out) == 0;
     if (!ok) { remove(tmp); return 0; }
-    return ReplaceFile(path, tmp);
+    return SwapInFile(path, tmp);
 }
 
 int PesIniLoadPadMethod(const char *path, int *method) {
@@ -262,7 +280,7 @@ int PesIniSaveValues(const char *path, const char *const keys[], const char *con
     }
     const int closed = fclose(out) == 0;
     if (bad || !closed) { remove(tmp); return 0; }
-    return ReplaceFile(path, tmp);
+    return SwapInFile(path, tmp);
 }
 
 /* Writes one whole-number setting, key=value, replacing its line (or appending it). Other lines are kept. */
@@ -289,7 +307,7 @@ int PesIniSaveInt(const char *path, const char *key, int value) {
     free(old);
     fprintf(out, "%s%d\n", prefix, value);
     if (fclose(out) != 0) { remove(tmp); return 0; }
-    return ReplaceFile(path, tmp);
+    return SwapInFile(path, tmp);
 }
 
 /* Reads one whole-number setting. Returns 1 if the file has a number for the key, else 0 (value unchanged). */

@@ -65,7 +65,7 @@ if [[ -n $windows ]]; then
     runtime+=(src/win32_*.c)
     # The static library's link-time optimization (ThinLTO in lld) runs here; on Linux it runs in
     # the .so link.
-    link=(-Wl,--disable-dynamicbase,--disable-high-entropy-va -lwinmm -lws2_32 -lpsapi -flto=thin)
+    link=(-Wl,--disable-dynamicbase,--disable-high-entropy-va -lwinmm -lws2_32 -lpsapi)
 fi
 # Third-party decoders: compiled once, without this project's -Werror policy.
 atrac9=(third_party/LibAtrac9/C/src/*.c)
@@ -88,7 +88,8 @@ if [[ -n $windows && -f out/pes17recomp.exe &&
                -newer out/pes17recomp.exe -print -quit) ]]; then
     echo "Up to date: $PWD/out/pes17recomp.exe"
 else
-"$CC" "${cstd[@]}" -O2 -g -Wall -Wextra -Werror "${threads[@]}" "${includes[@]}" -I. -Isrc src/main.c "${runtime[@]}" out/libatrac9.a -lm "${gpu[@]}" "${libraries[@]}" "${link[@]}" -o out/pes17recomp
+# -flto=thin comes first: with it after the library list, the Windows driver fails with "unable to make temporary file".
+"$CC" -flto=thin "${cstd[@]}" -O2 -g -Wall -Wextra -Werror "${threads[@]}" "${includes[@]}" -I. -Isrc src/main.c "${runtime[@]}" out/libatrac9.a -lm "${gpu[@]}" "${libraries[@]}" "${link[@]}" -o out/pes17recomp
 echo "Built $PWD/out/pes17recomp"
 fi
 if [[ ${1:-} == --test ]]; then

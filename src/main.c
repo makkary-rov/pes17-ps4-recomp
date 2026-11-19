@@ -994,8 +994,38 @@ static int user_in_game_dir(const char *user, const char *app0) {
     return 0;
 }
 
+/* The settings file (pes17recomp.ini) lives next to the executable, where the settings window
+ * (pes17settings.exe) writes it, whatever the working directory. PES_CONFIG still overrides it;
+ * setting it here gives every reader (pes_settings.cpp, runtime_pad.c) the same file. */
+static void default_config_path(void) {
+    const char *env = getenv("PES_CONFIG");
+    if (env && env[0]) return;
+    char exe[4096];
+#ifdef _WIN32
+    const DWORD n = GetModuleFileNameA(NULL, exe, sizeof(exe));
+    if (n == 0 || n >= sizeof(exe)) return;
+#else
+    const ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (n <= 0) return;
+    exe[n] = '\0';
+#endif
+    char *slash = strrchr(exe, '/');
+#ifdef _WIN32
+    char *back = strrchr(exe, '\\');
+    if (!slash || (back && back > slash)) slash = back;
+#endif
+    if (!slash || (size_t)(slash - exe) + 1 + sizeof("pes17recomp.ini") > sizeof(exe)) return;
+    strcpy(slash + 1, "pes17recomp.ini");
+#ifdef _WIN32
+    _putenv_s("PES_CONFIG", exe);
+#else
+    setenv("PES_CONFIG", exe, 1);
+#endif
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    default_config_path();
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the
        non-PIE brk heap, i.e. below 1 TiB: the guest packs pointers into 40 bits. */
