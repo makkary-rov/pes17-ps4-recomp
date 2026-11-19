@@ -12,7 +12,7 @@ enum GpuReadbacksMode : int { Disabled, Relaxed, Precise };
 
 // pes: the settings file's Display values (pes_settings.cpp): the in-game frame rate (60 or 30) and
 // vertical sync. The PES_* environment variables still override them.
-long PesFpsInGame();   // gameplay and menus (the game asks for 60): 30, 60 or 120
+long PesFpsInGame();   // gameplay and menus (the game asks for 60): 30 or 60
 long PesFpsCutscene(); // cutscenes (the game asks for 30): 30 or 60
 bool PesVsync();
 
@@ -58,8 +58,7 @@ public:
     // fixed-timestep presets, flips on vblank ticks).
     u32 GetVblankFrequency() {
         static const u32 value = [] {
-            // pes: 120 Hz when the settings ask for 120 FPS gameplay, else the PS4's 60 Hz.
-            const long hz = Number("PES_VBLANK_HZ", PesFpsInGame() == 120 ? 120 : 60);
+            const long hz = Number("PES_VBLANK_HZ", 60);
 #ifdef _WIN32
             // Uncapped flips use the fine vblank clock; the independent title guard stays active.
             return hz == 0 || hz == 480 ? 480u :

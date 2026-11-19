@@ -120,6 +120,8 @@ public:
 
     /// Schedules a copy of pending images for download back to CPU memory.
     void ProcessDownloadImages();
+    /// pes: PES_DOWNLOAD_STATS summary of the linear readback (texture_cache.cpp).
+    void NoteDownload(ImageId image_id);
 
     /// pes debugging: writes mip 0 / layer 0 of every image registered at `address` to
     /// <dir>/img_<address>_<n>_<w>x<h>_<format>.raw and prints what was found.

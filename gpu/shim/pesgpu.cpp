@@ -4,6 +4,7 @@
 // pes: glue between the C loader and the vendored shadPS4 video core.
 #include "pes_overlay.h"
 #include "pes_settings.h"
+#include "pes_profiler.h"
 #include "pes_copy.h"
 #ifndef _WIN32
 #include <sys/resource.h>
@@ -294,6 +295,7 @@ static void StartProfileWriter() {
 
 extern "C" int pesgpu_init(const PesGpuConfig* config) {
     PesSettings::Load();
+    PesProfiler::Start(); // PES_PROFILE only
 #ifdef PES_PGO_GENERATE
     StartProfileWriter();
 #endif

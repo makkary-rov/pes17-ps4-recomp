@@ -72,7 +72,7 @@ int main(void) {
     s.resolution = PesResolutionIndex(1280, 720);
     s.vsync = 0;
     s.fps_ingame = 30;
-    s.fps_replay = 60;
+    s.fps_replay = 30;
     s.quality = PES_QUALITY_LOW;
     s.motion_blur = 50;
     s.fsr_enabled = 1;
@@ -165,19 +165,19 @@ int main(void) {
     assert(strstr(text, "vsync=0\n") != NULL);
     free(text);
 
-    /* 120 FPS gameplay round-trips; cutscenes stay at most 60. */
+    /* 30 FPS gameplay round-trips; a 120 in the file is not kept (30 or 60 only); cutscenes always 30. */
     got = PesDisplayDefaults();
-    got.fps_ingame = 120;
+    got.fps_ingame = 30;
     got.fps_replay = 60;
     assert(PesIniSaveDisplay(path, got) == 1);
     text = ReadFile(path);
-    assert(strstr(text, "fps_ingame=120\n") != NULL && strstr(text, "fps_replay=60\n") != NULL);
+    assert(strstr(text, "fps_ingame=30\n") != NULL && strstr(text, "fps_replay=30\n") != NULL);
     free(text);
     PesDisplaySettings again = PesDisplayDefaults();
-    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_ingame == 120 && again.fps_replay == 60);
-    WriteFile(path, "fps_replay=120\n");
+    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_ingame == 30 && again.fps_replay == 30);
+    WriteFile(path, "fps_replay=120\nfps_ingame=120\n");
     again = PesDisplayDefaults();
-    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_replay == 30); /* 120 is gameplay only */
+    assert(PesIniLoadDisplay(path, &again) == 1 && again.fps_replay == 30 && again.fps_ingame == 60); /* 120 not offered */
 
     remove(path);
     printf("PASS: display settings written as the game reads them, read back, two kept values, other lines kept\n");

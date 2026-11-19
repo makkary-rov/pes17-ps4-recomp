@@ -32,8 +32,8 @@ PesDisplaySettings PesDisplayClamp(PesDisplaySettings s) {
     if (!InRange(s.resolution, 0, PES_RESOLUTION_COUNT - 1)) s.resolution = d.resolution;
     if (!InRange(s.quality, PES_QUALITY_LOW, PES_QUALITY_HIGH)) s.quality = d.quality;
     s.vsync = s.vsync ? 1 : 0;
-    if (s.fps_ingame != 120 && s.fps_ingame != 60 && s.fps_ingame != 30) s.fps_ingame = d.fps_ingame;
-    if (s.fps_replay != 60 && s.fps_replay != 30) s.fps_replay = d.fps_replay;
+    if (s.fps_ingame != 60 && s.fps_ingame != 30) s.fps_ingame = d.fps_ingame;
+    s.fps_replay = 30; /* cutscenes: the game's own 30 FPS only (faster ran them fast) */
     if (!InRange(s.audio_buffer, 1, 8)) s.audio_buffer = d.audio_buffer;
     if (s.motion_blur != 0 && s.motion_blur != 25 && s.motion_blur != 50 && s.motion_blur != 75 && s.motion_blur != 100) s.motion_blur = d.motion_blur;
     s.fsr_enabled = s.fsr_enabled ? 1 : 0;

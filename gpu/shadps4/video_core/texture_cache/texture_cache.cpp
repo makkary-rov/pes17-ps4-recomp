@@ -3,6 +3,10 @@
 
 #include <xxhash.h>
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <map>
+#include <tuple>
 
 #include "pes_toggles.h"
 #include "pes_free_check.h"
@@ -197,10 +201,62 @@ void TextureCache::ProcessDownloadImages() {
     }
     std::unique_lock lk{download_images_mutex};
     downloads_queued.store(false, std::memory_order_relaxed);
+    // pes: small readbacks (<= 64 KiB, e.g. the game's 32x32 luminance pair, read every frame in
+    // gameplay) are asynchronous: the copy is queued and written into the game's memory when the
+    // GPU gets there, instead of waiting for the GPU to finish everything (Finish) twice a
+    // frame. The game alternates two such images, so it reads last frame's value anyway. Larger
+    // ones (the kit staging textures) stay synchronous. PES_SYNC_READBACK=1: all synchronous.
+    static const bool all_sync = [] {
+        const char* v = std::getenv("PES_SYNC_READBACK");
+        const bool on = v && v[0] == '1';
+        std::printf("Readback: %s\n", on ? "all synchronous" : "small images (<= 64 KiB) asynchronous");
+        return on;
+    }();
     for (const ImageId image_id : download_images) {
-        DownloadImageMemory(image_id, true);
+        NoteDownload(image_id);
+        const auto& info = slot_images[image_id].info;
+        const u64 bytes = u64(info.pitch) * info.size.height * info.size.depth * info.resources.layers *
+                          (info.num_bits / 8);
+        DownloadImageMemory(image_id, all_sync || bytes > 64 * 1024);
     }
     download_images.clear();
+}
+
+// pes: PES_DOWNLOAD_STATS=1: every 5 s, which images the linear readback downloads (each one
+// waits for the GPU to finish): count, and the most frequent sizes/formats/addresses.
+void TextureCache::NoteDownload(ImageId image_id) {
+    static const bool on = std::getenv("PES_DOWNLOAD_STATS") != nullptr;
+    if (!on) return;
+    struct Key {
+        VAddr address;
+        u32 width, height, bits;
+        bool operator<(const Key& o) const {
+            return std::tie(address, width, height, bits) < std::tie(o.address, o.width, o.height, o.bits);
+        }
+    };
+    static std::map<Key, u64> counts;
+    static u64 total, last_ms;
+    const Image& image = slot_images[image_id];
+    if (False(image.flags & ImageFlagBits::GpuModified)) return; // DownloadImageMemory skips these
+    ++counts[{image.info.guest_address, image.info.size.width, image.info.size.height, image.info.num_bits}];
+    ++total;
+    const u64 now_ms = u64(std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch()).count());
+    if (last_ms == 0) last_ms = now_ms;
+    if (now_ms - last_ms < 5000) return;
+    std::vector<std::pair<u64, Key>> top;
+    for (const auto& [k, c] : counts) top.push_back({c, k});
+    std::sort(top.begin(), top.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::printf("Downloads: %llu in %.1f s (%zu images)", (unsigned long long)total,
+                (now_ms - last_ms) / 1000.0, counts.size());
+    for (size_t i = 0; i < top.size() && i < 6; ++i) {
+        std::printf("; %llux %ux%u %ubpp @%llx", (unsigned long long)top[i].first, top[i].second.width,
+                    top[i].second.height, top[i].second.bits, (unsigned long long)top[i].second.address);
+    }
+    std::printf("\n");
+    counts.clear();
+    total = 0;
+    last_ms = now_ms;
 }
 
 void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {

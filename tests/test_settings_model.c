@@ -30,13 +30,13 @@ int main(void) {
     assert(c.vsync == 1);
     assert(c.fps_ingame == 60 && c.fps_replay == 30);
     PesDisplaySettings fast = PesDisplayDefaults();
-    fast.fps_ingame = 120;
+    fast.fps_ingame = 120; /* not offered: falls back to 60 */
     fast.fps_replay = 120;
     fast = PesDisplayClamp(fast);
-    assert(fast.fps_ingame == 120 && fast.fps_replay == 30); /* 120 for gameplay only */
+    assert(fast.fps_ingame == 60 && fast.fps_replay == 30); /* 30 or 60 only */
     assert(c.audio_buffer == 1);
     assert(c.motion_blur == 100 && c.fsr_preset == PES_FSR_QUALITY && c.fsr_enabled == 1);
-    PesDisplaySettings good = {PES_MODE_FULLSCREEN, 0, PES_QUALITY_LOW, 0, 30, 60, 8, 75, 1, PES_FSR_BALANCED};
+    PesDisplaySettings good = {PES_MODE_FULLSCREEN, 0, PES_QUALITY_LOW, 0, 30, 30, 8, 75, 1, PES_FSR_BALANCED}; /* cutscenes: 30 only */
     PesDisplaySettings kept = PesDisplayClamp(good);
     assert(memcmp(&kept, &good, sizeof(good)) == 0);
 

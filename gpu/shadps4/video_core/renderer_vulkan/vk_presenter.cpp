@@ -132,7 +132,17 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
       swapchain{instance, window}, runtime{instance, draw_scheduler},
       rasterizer{std::make_unique<Rasterizer>(instance, draw_scheduler, runtime, liverpool)},
       texture_cache{rasterizer->GetTextureCache()} {
-    const u32 num_images = swapchain.GetImageCount();
+    // pes: presentation frames are copies of the game's display buffers, independent of the
+    // swapchain images (the index only names them). Two more than the swapchain images let the
+    // next frame be copied while earlier ones are still being presented (PrepareFrame waited
+    // ~23% of the draw recording thread for a free one). PES_PRESENT_FRAMES sets the count.
+    u32 num_images = swapchain.GetImageCount() + 2;
+    if (const char* env = std::getenv("PES_PRESENT_FRAMES")) {
+        const long n = std::strtol(env, nullptr, 10);
+        if (n >= 2 && n <= 8) num_images = u32(n);
+    }
+    std::printf("Presenter: %u presentation frames (%u swapchain images)\n", num_images,
+                swapchain.GetImageCount());
     const vk::Device device = instance.GetDevice();
 
     // Create presentation frames.

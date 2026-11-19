@@ -863,7 +863,12 @@ void runtime_restart(void) {
 static int loader_main(int argc, char **argv);
 static int main_argc;
 static char **main_argv;
-static unsigned __stdcall loader_thread(void *unused) { (void)unused; return (unsigned)loader_main(main_argc, main_argv); }
+/* Named so profilers and debuggers can tell the game's main loop thread apart. */
+static unsigned __stdcall loader_thread(void *unused) {
+    (void)unused;
+    runtime_win_set_thread_name("game:main");
+    return (unsigned)loader_main(main_argc, main_argv);
+}
 int main(int argc, char **argv) {
     crash_win_init();
     timeBeginPeriod(1); /* 1 ms waits for timed locks and sleeps outside runtime_sleep_ns */

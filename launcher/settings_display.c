@@ -40,7 +40,7 @@ static const wchar_t *kContentClass = L"PesSettingsContent";
 static HWND g_page, g_content;
 static int g_scroll_pos;
 static int g_content_height;
-static HWND g_mode[3], g_resolution, g_quality[3], g_vsync, g_fps_ingame, g_fps_replay, g_motion_blur;
+static HWND g_mode[3], g_resolution, g_quality[3], g_vsync, g_fps_ingame, g_motion_blur;
 static HWND g_fsr_on, g_fsr_preset;
 
 static HWND Make(HWND parent, const wchar_t *cls, const wchar_t *text, DWORD style, int x, int y, int w, int h, int id) {
@@ -186,17 +186,12 @@ void SettingsDisplayCreate(HWND parent, HFONT font) {
     /* Other settings: vertical sync, frame rates and motion blur (the PS4 native values). */
     GroupBox(p, L"Other settings", 16, 316, 718, 240);
     g_vsync = Make(p, L"BUTTON", L"Vertical sync", BS_AUTOCHECKBOX | WS_TABSTOP, 40, 346, 300, 24, ID_VSYNC);
-    /* Gameplay (and menus) 30/60/120; cutscenes 30/60. The game itself runs gameplay at 60 and
-     * cutscenes at 30 (its flip rate); these replace each. */
+    /* Gameplay (and menus) 30 or 60 (120 ran the game fast: its step follows the display tick). Cutscenes stay at the game's own 30 FPS (not a setting):
+     * the game advances one step per frame, so faster cutscenes ran fast. */
     Make(p, L"STATIC", L"Frame rate in gameplay", SS_LEFT, 40, 380, 200, 20, 0);
     g_fps_ingame = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 378, 120, 120, ID_FPS_INGAME);
-    Make(p, L"STATIC", L"Frame rate in cutscenes", SS_LEFT, 40, 406, 200, 20, 0);
-    g_fps_replay = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 404, 120, 120, ID_FPS_REPLAY);
     SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"30");
     SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"60");
-    SendMessageW(g_fps_ingame, CB_ADDSTRING, 0, (LPARAM)L"120");
-    SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"30");
-    SendMessageW(g_fps_replay, CB_ADDSTRING, 0, (LPARAM)L"60");
     Make(p, L"STATIC", L"Motion blur", SS_LEFT, 40, 448, 200, 20, 0);
     g_motion_blur = Make(p, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, 276, 446, 120, 160, ID_MOTION_BLUR);
     SendMessageW(g_motion_blur, CB_ADDSTRING, 0, (LPARAM)L"OFF");
@@ -235,8 +230,7 @@ void SettingsDisplaySetValues(PesDisplaySettings s) {
     SendMessageW(g_resolution, CB_SETCURSEL, s.resolution, 0);
     for (int i = 0; i < 3; ++i) SendMessageW(g_quality[i], BM_SETCHECK, i == s.quality ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(g_vsync, BM_SETCHECK, s.vsync ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendMessageW(g_fps_ingame, CB_SETCURSEL, s.fps_ingame == 30 ? 0 : s.fps_ingame == 120 ? 2 : 1, 0);
-    SendMessageW(g_fps_replay, CB_SETCURSEL, s.fps_replay == 30 ? 0 : 1, 0);
+    SendMessageW(g_fps_ingame, CB_SETCURSEL, s.fps_ingame == 30 ? 0 : 1, 0);
     int blur_index = 4;
     for (int i = 0; i < PES_MOTION_BLUR_COUNT; ++i) if (PesMotionBlurSteps[i] == s.motion_blur) blur_index = i;
     SendMessageW(g_motion_blur, CB_SETCURSEL, blur_index, 0);
@@ -253,11 +247,11 @@ PesDisplaySettings SettingsDisplayGetValues(void) {
     for (int i = 0; i < 3; ++i) if (SendMessageW(g_quality[i], BM_GETCHECK, 0, 0) == BST_CHECKED) s.quality = i;
     s.vsync = SendMessageW(g_vsync, BM_GETCHECK, 0, 0) == BST_CHECKED;
     {
-        static const int kGameplay[3] = {30, 60, 120};
+        static const int kGameplay[2] = {30, 60};
         const int pick = (int)SendMessageW(g_fps_ingame, CB_GETCURSEL, 0, 0);
-        s.fps_ingame = pick >= 0 && pick < 3 ? kGameplay[pick] : 60;
+        s.fps_ingame = pick >= 0 && pick < 2 ? kGameplay[pick] : 60;
     }
-    s.fps_replay = SendMessageW(g_fps_replay, CB_GETCURSEL, 0, 0) == 0 ? 30 : 60;
+    s.fps_replay = 30; /* cutscenes: the game's own 30 FPS, not a choice */
     const int blur = (int)SendMessageW(g_motion_blur, CB_GETCURSEL, 0, 0);
     s.motion_blur = blur >= 0 && blur < PES_MOTION_BLUR_COUNT ? PesMotionBlurSteps[blur] : 0;
     s.fsr_enabled = SendMessageW(g_fsr_on, BM_GETCHECK, 0, 0) == BST_CHECKED;

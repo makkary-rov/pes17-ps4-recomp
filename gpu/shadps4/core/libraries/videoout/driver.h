@@ -129,6 +129,7 @@ private:
 
     std::mutex mutex;
     std::condition_variable request_cv; ///< pes: a flip was queued (immediate flips)
+    std::condition_variable taken_cv;   ///< pes: the present thread took a flip (early release pacing)
     VideoOutPort main_port{};
     std::jthread present_thread;
     std::queue<Request> requests;

@@ -84,6 +84,20 @@ VideoOutDriver::VideoOutDriver(u32 width, u32 height) {
     present_thread = std::jthread([&](std::stop_token token) { PresentThread(token); });
 }
 
+// pes: early release (default; PES_EARLY_FLIP_RELEASE=0 turns it off) frees a display buffer's
+// label once its copy for presentation is queued (SubmitFlipInternal) instead of when the next
+// frame is presented (Flip); with flip pacing it lifted gameplay from ~40 to 60 FPS. Read once.
+static bool EarlyFlipRelease() {
+    static const bool on = [] {
+        const char* v = std::getenv("PES_EARLY_FLIP_RELEASE");
+        const bool enabled = !(v && v[0] == '0');
+        std::printf("VideoOut: display buffer release %s\n",
+                    enabled ? "early (when its copy is queued)" : "at the next present (PS4 order)");
+        return enabled;
+    }();
+    return on;
+}
+
 void VideoOutDriver::RunPresenter(std::function<void()> work, bool if_idle) {
     if (!separate_swap) {
         work();
@@ -724,8 +738,9 @@ void VideoOutDriver::Flip(const Request& req) {
         }
     }
 
-    // Reset prev flip label
-    if (port->prev_index != -1) {
+    // Reset prev flip label (with early release it was reset at submit; resetting it here could
+    // clear the label of a newer frame already drawn into that buffer).
+    if (port->prev_index != -1 && !EarlyFlipRelease()) {
         port->buffer_labels[port->prev_index] = 0;
         port->SignalVoLabel();
     }
@@ -784,10 +799,26 @@ void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_
         ASSERT_MSG(buffer.group_index >= 0, "Trying to flip an unregistered buffer!");
         const auto& group = port->groups[buffer.group_index];
         frame = presenter->PrepareFrame(group, buffer.address_left);
+        // pes: early release (default; PES_EARLY_FLIP_RELEASE=0: off). PrepareFrame has copied the display
+        // buffer into the presenter's frame, recorded in stream order before any later draw, so
+        // the game may draw into the buffer again at once: its label goes to 0 now instead of
+        // when the next frame is presented. The command thread then does not wait a vblank
+        // and a present before each frame (WaitVoLabel).
+        if (EarlyFlipRelease()) {
+            port->buffer_labels[index] = 0;
+            port->SignalVoLabel();
+        }
     }
 
     {
-        std::scoped_lock lock{mutex};
+        std::unique_lock lock{mutex};
+        // pes: with early release nothing else holds the game to the display: it advances one
+        // simulation step per frame, so frames queued faster than they are presented make the
+        // game run fast. Keep at most one flip waiting for the present thread (the game is at
+        // most a frame ahead, as with the buffer wait on PS4).
+        if (EarlyFlipRelease() && index != -1) {
+            taken_cv.wait(lock, [this] { return requests.empty(); });
+        }
         requests.push({
             .frame = frame,
             .port = port,
@@ -837,6 +868,7 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         if (!requests.empty()) {
             const auto request = requests.front();
             requests.pop();
+            taken_cv.notify_all(); // pes: early release pacing (SubmitFlipInternal)
             return request;
         }
         return {};
