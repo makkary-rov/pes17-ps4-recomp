@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Draws the settings window's gamepad picture and button icons (launcher/assets).
+"""Draws the settings window's button icons (launcher/assets/icon_00.bmp .. icon_23.bmp).
 
-Every pixel is drawn by this script: a generic gamepad outline and small labelled chips. Nothing is
-copied from a photo, a screenshot or any product artwork, and no console maker's colours or logos
-are used. Labels use DejaVu Sans (gpu/third_party/fonts, see LICENSE-DejaVu.txt).
+Every pixel is drawn by this script: small labelled chips. Nothing is copied from a photo, a
+screenshot or any product artwork, and no console maker's colours or logos are used. Labels use
+DejaVu Sans (gpu/third_party/fonts, see LICENSE-DejaVu.txt). The gamepad picture comes from
+tools/art/cut_gamepad.py.
 
 Run from the repository root (needs Pillow, a developer tool only):
     python tools/art/make_settings_art.py
-Writes launcher/assets/controller_pad.bmp (260 x 325) and icon_00.bmp .. icon_23.bmp (40 x 26),
-all 24-bit, on the settings page colour (240, 240, 240).
+Writes 24 icons (40 x 26, 24-bit) on the settings page colour (240, 240, 240).
 """
 import math
 from pathlib import Path
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "launcher" / "assets"
@@ -103,81 +103,11 @@ for i, direction in zip(range(20, 24), ("up", "down", "left", "right")):
     ICONS[i] = chip_stick("R", direction)
 
 
-# ---- gamepad picture (260 x 325) ------------------------------------------------------------
-def gamepad():
-    W, H = 260 * SS, 325 * SS
-    im = Image.new("RGB", (W, H), PAGE)
-
-    def S(*v):
-        return [x * SS for x in v]
-
-    # body: a wide centre with two grips splayed outward
-    body = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(body).rounded_rectangle(S(24, 98, 236, 206), radius=44 * SS, fill=255)
-    grip = Image.new("L", (110 * SS, 164 * SS), 0)
-    ImageDraw.Draw(grip).rounded_rectangle(S(10, 4, 100, 158), radius=44 * SS, fill=255)
-    for angle, cx in ((-11, 66), (11, 194)):
-        g = grip.rotate(angle, expand=True, resample=Image.BICUBIC)
-        layer = Image.new("L", (W, H), 0)
-        layer.paste(g, (int(cx * SS - g.width / 2), 140 * SS))
-        body = ImageChops.lighter(body, layer)
-    # triggers and bumpers: stacked pieces joined to the top of the body
-    parts = Image.new("L", (W, H), 0)
-    p = ImageDraw.Draw(parts)
-    for x in (34, 152):
-        p.rounded_rectangle(S(x + 14, 30, x + 62, 84), radius=20 * SS, fill=255)  # trigger
-        p.rounded_rectangle(S(x + 4, 74, x + 72, 104), radius=14 * SS, fill=255)  # bumper
-
-    dark, mid, light = (44, 48, 55), (64, 70, 80), (96, 103, 116)
-    d = ImageDraw.Draw(im)
-    im.paste(light, mask=parts)
-    im.paste(mid, mask=parts.filter(ImageFilter.MinFilter(2 * SS + 1)))
-    im.paste(light, mask=body)
-    im.paste(dark, mask=body.filter(ImageFilter.MinFilter(2 * SS + 1)))
-    d = ImageDraw.Draw(im, "RGBA")
-    d.ellipse(S(40, 100, 220, 170), fill=(255, 255, 255, 14))  # top sheen
-
-    # centre pad and two small buttons
-    d.rounded_rectangle(S(100, 106, 160, 154), radius=10 * SS, fill=(30, 33, 38), outline=(84, 90, 100), width=SS)
-    for x in (82, 172):
-        d.rounded_rectangle(S(x, 110, x + 6, 130), radius=3 * SS, fill=(30, 33, 38), outline=(84, 90, 100), width=SS)
-    # d-pad
-    cx, cy = 54 * SS, 138 * SS
-    d.rounded_rectangle((cx - 8 * SS, cy - 25 * SS, cx + 8 * SS, cy + 25 * SS), radius=4 * SS, fill=(26, 29, 34), outline=(84, 90, 100), width=SS)
-    d.rounded_rectangle((cx - 25 * SS, cy - 8 * SS, cx + 25 * SS, cy + 8 * SS), radius=4 * SS, fill=(26, 29, 34), outline=(84, 90, 100), width=SS)
-    d.rectangle((cx - 7 * SS, cy - 7 * SS, cx + 7 * SS, cy + 7 * SS), fill=(26, 29, 34))
-    for dx, dy, pts in ((0, -17, [(0, -4), (4, 3), (-4, 3)]), (0, 17, [(0, 4), (4, -3), (-4, -3)]),
-                        (-17, 0, [(-4, 0), (3, -4), (3, 4)]), (17, 0, [(4, 0), (-3, -4), (-3, 4)])):
-        d.polygon([(cx + (dx + x) * SS, cy + (dy + y) * SS) for x, y in pts], fill=(150, 156, 168))
-    # face buttons: four discs with plain light symbols (no colours)
-    fx, fy, g = 206 * SS, 138 * SS, 19 * SS
-    centres = {"tri": (fx, fy - g), "cross": (fx, fy + g), "sq": (fx - g, fy), "circ": (fx + g, fy)}
-    for key, (x, y) in centres.items():
-        d.ellipse((x - 12 * SS, y - 12 * SS, x + 12 * SS, y + 12 * SS), fill=(26, 29, 34), outline=(84, 90, 100), width=SS)
-        sym, r, w = (170, 176, 188), 5 * SS, int(1.8 * SS)
-        if key == "tri":
-            d.polygon([(x, y - r - SS), (x + r + SS, y + r - SS), (x - r - SS, y + r - SS)], outline=sym, width=w)
-        elif key == "cross":
-            d.line((x - r, y - r, x + r, y + r), fill=sym, width=w)
-            d.line((x - r, y + r, x + r, y - r), fill=sym, width=w)
-        elif key == "sq":
-            d.rectangle((x - r, y - r, x + r, y + r), outline=sym, width=w)
-        else:
-            d.ellipse((x - r, y - r, x + r, y + r), outline=sym, width=w)
-    # sticks
-    for x in (96, 164):
-        d.ellipse((x * SS - 30 * SS, 224 * SS - 30 * SS, x * SS + 30 * SS, 224 * SS + 30 * SS), fill=(24, 27, 32), outline=(84, 90, 100), width=SS)
-        d.ellipse((x * SS - 21 * SS, 224 * SS - 21 * SS, x * SS + 21 * SS, 224 * SS + 21 * SS), fill=(52, 57, 66), outline=(110, 116, 128), width=SS)
-        d.ellipse((x * SS - 12 * SS, 224 * SS - 12 * SS, x * SS + 12 * SS, 224 * SS + 12 * SS), outline=(76, 82, 94), width=SS)
-    return im.resize((260, 325), Image.LANCZOS).convert("RGB")
-
-
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for i, chip in enumerate(ICONS):
         finish(chip, "icon_%02d.bmp" % i)
-    gamepad().save(OUT / "controller_pad.bmp", format="BMP")
-    print("wrote controller_pad.bmp and icon_00..icon_23.bmp to", OUT)
+    print("wrote icon_00..icon_23.bmp to", OUT)
 
 
 if __name__ == "__main__":
