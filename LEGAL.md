@@ -17,7 +17,7 @@ You need your own legally obtained dump to run the project. No game files, keys 
 
 Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with. This project is not affiliated with or endorsed by them.
 
-The launcher and settings window art is this project's own: the logo is an original wordmark, the button icons are drawn by `tools/art/make_settings_art.py`, the gamepad picture, the tile pictures and the background were supplied by the project owner (the pictures are AI-generated). No console maker's artwork, product photo or logo and nothing from the game's artwork is used or shipped.
+The launcher and settings window art is this project's own: the logo is an original wordmark, the button icons are drawn by `tools/art/make_settings_art.py`, the gamepad picture, the three tile pictures and the settings background were supplied by the project owner, and all of them are AI-generated (the launcher background is a crop of the settings background). No console maker's artwork, product photo or logo and nothing from the game's artwork is used or shipped.
 
 ## Game-derived information (decision D6)
 

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # Credits
 
 This project is not affiliated with or endorsed by Konami or Sony. Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with.
@@ -20,4 +21,4 @@ This project is not affiliated with or endorsed by Konami or Sony. Pro Evolution
 
 - The launcher's logo ("2017RECOMP") is original to this project, set in Arial Black, which is not shipped (the launcher uses the copy that comes with Windows).
 - The settings window's button icons are drawn by `tools/art/make_settings_art.py` (original shapes, labels in DejaVu Sans). Its gamepad picture was supplied by the project owner (an AI-generated image, cut out by `tools/art/cut_gamepad.py`).
-- The launcher tile pictures are AI-generated and are not photographs of real places. The settings window background was supplied by the project owner for use in this project. All are included under this project's licence.
+- The launcher tile pictures and the settings window background are AI-generated images supplied by the project owner; the launcher background is a crop of the settings background. None is a photograph of a real place. All are included under this project's licence.

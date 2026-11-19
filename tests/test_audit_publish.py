@@ -5,6 +5,7 @@ from unittest import mock
 
 from paths import ROOT  # noqa: F401  (puts scripts/ on sys.path)
 import audit_publish as ap
+import audit_history as ah
 
 # Terms that the audit rejects are assembled at run time so this file has no R0 hit.
 BLOOD = 'blood' + 'borne'
@@ -58,6 +59,19 @@ class EmailTests(unittest.TestCase):
 
     def test_identity_constant(self):
         self.assertEqual(ap.IDENTITY, 'noreply@example.invalid')
+
+
+class HistoryRuleTests(unittest.TestCase):
+    def test_game_archive_names_in_messages(self):
+        self.assertTrue(ah.message_names_game_archive("the local x_g4.cpk is truncated"))
+        self.assertTrue(ah.message_names_game_archive("reads face.FPK first"))
+        self.assertFalse(ah.message_names_game_archive("the archive reader handles a short cpk header"))
+
+    def test_commit_dates_must_be_utc(self):
+        self.assertFalse(ah.zone_bad("2026-11-19T20:04:00+00:00"))
+        self.assertFalse(ah.zone_bad("2026-11-19T20:04:00Z"))
+        self.assertTrue(ah.zone_bad("2026-11-19T20:04:00+05:30"))
+        self.assertTrue(ah.zone_bad("2026-11-19T20:04:00-04:00"))
 
 
 class SizeTests(unittest.TestCase):

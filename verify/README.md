@@ -3,8 +3,7 @@
 
 ## verify_M2.ps1 (milestone M2 check)
 
-Runs the M2 criteria C1-C9 (spec: `.agent-work/2026-11-17-m2-plan/spec.md`, section 1 and the
-Amendments) against one game directory and writes `out\verify\M2-result.json`. Run it on the PC
+Runs the M2 criteria C1-C9 (see the header of the script) against one game directory and writes `out\verify\M2-result.json`. Run it on the PC
 that has the game:
 
 ```

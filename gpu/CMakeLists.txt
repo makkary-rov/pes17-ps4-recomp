@@ -193,7 +193,7 @@ file(GLOB SHIM_SOURCES CONFIGURE_DEPENDS shim/*.cpp shim/*/*.cpp)
 if (WIN32)
     # These optional experiments use Linux dma-buf mappings and SIGTRAP hooks. Keep the
     # section-backed Win32 memory and its vectored crash diagnostics; do not emulate dma-buf.
-    list(FILTER SHIM_SOURCES EXCLUDE REGEX "/pes_(guest_memory|guest_hooks|gnm_hooks|free_check|heap_sites)\\.cpp$")
+    list(FILTER SHIM_SOURCES EXCLUDE REGEX "/pes_(guest_memory|gnm_hooks|heap_sites)\\.cpp$")
     set(PESGPU_LIBRARY_TYPE STATIC)
 else()
     set(PESGPU_LIBRARY_TYPE SHARED)

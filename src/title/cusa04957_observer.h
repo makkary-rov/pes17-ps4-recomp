@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* Read-only state observer (ledger row G-44) for CUSA04957: where the match controller keeps its mode.
  * Evidence (existing Ghidra project, read-only; guest = Ghidra address - 0x1000000):
- *   guest 0x2c1bf0 (match-scene factory) stores the controller it creates (name "match_2d", size 0x16d78,
- *   created by guest 0x239f840) in the global at guest 0x4996218.
+ *   guest 0x2c1bf0 (match-scene factory) stores the controller it creates (size 0x16d78, created by
+ *   guest 0x239f840) in the global at guest 0x4996218.
  *   guest 0x23a3dd0 (SetMode) writes the mode byte at controller+0xb8 and clears the sub-state;
  *   guest 0x23a3dc0 writes the sub-state byte at controller+0xb9.
  * The observer only reads these bytes; it never writes guest memory or changes control flow. */

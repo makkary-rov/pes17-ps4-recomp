@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* The Keyboard tab of the settings window (M6.5a): the 24 bindings around the controller picture.
  * Clicking a binding button waits for a key; the next key pressed becomes the binding (Esc cancels).
- * The bindings and their rules live in settings_keys (tested on every platform). Layout follows the
- * reference screenshot "tab-kb.jpg" and is estimated; it needs a visual check. */
+ * The bindings and their rules live in settings_keys (tested on every platform). Layout is estimated and
+ * needs a visual check. */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>

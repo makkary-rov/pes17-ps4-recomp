@@ -1,4 +1,5 @@
-# PES 2017 PS4 recompilation (PC)
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+# 2017RECOMP: the PS4 build of PES 2017 on Windows
 
 This project runs the PS4 build of a 2017 football game on Windows. It is not a source-code recompilation and not an emulator of the whole console: it loads the game's own x86-64 code natively and replaces the PS4 system libraries with a small high-level runtime written in C, with a Vulkan renderer derived from shadPS4 for graphics.
 

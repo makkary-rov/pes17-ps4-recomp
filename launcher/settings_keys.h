@@ -3,7 +3,7 @@
  * keys and the rule that one key is bound to one slot at a time. Plain C, no Windows calls, so it is
  * tested on every platform. Keys are Windows virtual-key codes (VK_*); 0 means unbound.
  *
- * Slot order follows the reference screenshot and the 2017 Settings_b.dll (the default table):
+ * Slot order follows the reference screenshot and the default key layout of the original PC game's settings:
  * 0 X, 1 A, 2 B, 3 Y, 4 LT, 5 RT, 6 LB, 7 RB, 8 Start, 9 Back, 10 LS press, 11 RS press,
  * 12-15 d-pad Up/Down/Left/Right, 16-19 LS Up/Down/Left/Right, 20-23 RS Up/Down/Left/Right. */
 #ifndef PES_LAUNCHER_SETTINGS_KEYS_H
@@ -24,7 +24,7 @@ enum PesPadSlot {
 /* Short label of a slot as shown on the tab (e.g. "LT", "Up"). */
 const char *PesPadSlotLabel(int slot);
 
-/* The defaults from the 2017 Settings_b.dll key table. */
+/* The default key layout of the original PC game's settings. */
 void PesKeyboardDefaults(int keys[PES_PAD_SLOTS]);
 
 /* Binds key to slot. The key is removed from any other slot first (one key, one slot); key 0 unbinds

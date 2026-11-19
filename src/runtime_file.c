@@ -117,7 +117,7 @@ static int translate(const char *guest,char *out,size_t size) {
     if (!m) result=ENOENT;
     else if ((size_t)snprintf(out,size,"%s%s",m->host,buffer+best)>=size) result=ENAMETOOLONG;
     host_unlock(&lock);
-    /* PES 2017: If a file requested in /download0 does not exist, fall back to /app0 */
+    /* If a file requested in /download0 does not exist, fall back to /app0 */
     if (result==0 && !strncmp(buffer, "/download0/", sizeof("/download0/") - 1)) {
         HostStat st;
         if (host_stat(out, &st) != 0) {

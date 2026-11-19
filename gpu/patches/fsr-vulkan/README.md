@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 # Local changes to gpu/third_party/fsr-vulkan
 
 The submodule points at upstream FireBurn/FSR-Vulkan (`c64f093`). `build.sh` applies the

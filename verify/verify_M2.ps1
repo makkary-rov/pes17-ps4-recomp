@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 <#
 .SYNOPSIS
-    M2 verification for one PES 2017 game directory: criteria C1-C9 (.agent-work spec.md, section 1).
+    M2 verification for one game directory: criteria C1-C9.
 .DESCRIPTION
     Runs, in order: build.sh in the MSYS2 CLANG64 shell (skipped by -SkipBuild); prepare.py twice (C1);
     content_profile.py; the loader with --stop-before-entry, the import report and an image dump
