@@ -4,6 +4,7 @@
 This project is not affiliated with or endorsed by Konami or Sony. Pro Evolution Soccer, PES, PlayStation and related names, logos and marks belong to their owners (Konami Digital Entertainment, Sony Interactive Entertainment) and are named only to identify the game this project works with.
 
 - The authors of the upstream performance-stability-v2 PC port project
+- The PS4 PC port community whose work this project is derived from (not a fork); see LICENSES/upstream for the commits and pull requests: visy, Mrsuss60, Supermedo, d4rksp4rt4n, AwesomeObserver, Awakenchan, Gerasimos Kanellatos (GerasimosKan) and DarkIzuku
 - The shadPS4 project
 - The yuzu project
 - The Citra project
