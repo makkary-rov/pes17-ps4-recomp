@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 <div align="center">
 
-<img src="docs/header.png" alt="2017RECOMP: The definitive way to play it on PC!" width="100%">
+<img src="docs/header.png" alt="The definitive way to play it on PC!" width="100%">
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Features](#features) · [FAQ](#faq) · [Documentation](#documentation) · [Credits](#credits) · [Disclaimer](#disclaimer)
 
