@@ -1,16 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 <div align="center">
 
-# 2017RECOMP
-
-### PES 2017 for PS4, running natively on Windows
-
-**Your own copy of the game, your own PC. No console, no emulator window, no install of Python or MSYS2.**
-
-![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20(64--bit)-informational)
-![Graphics](https://img.shields.io/badge/graphics-Vulkan-red)
-![Release](https://img.shields.io/badge/release-0.1-orange)
+<img src="docs/header.png" alt="2017RECOMP: The definitive way to play it on PC!" width="100%">
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Features](#features) · [FAQ](#faq) · [Documentation](#documentation) · [Credits](#credits) · [Disclaimer](#disclaimer)
 

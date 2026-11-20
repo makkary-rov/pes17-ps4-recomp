@@ -22,4 +22,5 @@ This project is not affiliated with or endorsed by Konami or Sony. Pro Evolution
 
 - The launcher's logo ("2017RECOMP") is original to this project, set in Arial Black, which is not shipped (the launcher uses the copy that comes with Windows).
 - The settings window's button icons are drawn by `tools/art/make_settings_art.py` (original shapes, labels in DejaVu Sans). Its gamepad picture was supplied by the project owner (an AI-generated image, cut out by `tools/art/cut_gamepad.py`).
+- The README header picture (`docs/header.png`) is drawn by `tools/art/make_header.py` from the settings window background, with the wordmark in Arial Black and the tagline in Segoe UI (both from Windows, not shipped; only the finished picture is).
 - The launcher tile pictures and the settings window background are AI-generated images supplied by the project owner; the launcher background is a crop of the settings background. None is a photograph of a real place. All are included under this project's licence.
