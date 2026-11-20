@@ -13,7 +13,7 @@
 | M6.5a launcher and settings app | done, with three checks still needing the owner: starting a match from the launcher alone (the preparation chain itself is verified), a keyboard or pad rebind taking effect in a match, and the settings window's look on a high-DPI screen |
 | M6.5b audio level | closed |
 | M6.5c FSR 4 and DLSS, graphics sliders | moved to after the first release; FSR 3.1 (on or off, four modes) is in the release |
-| M7 publish | in preparation: publish audit, history rewrite for the first commit, licence review, QA |
+| M7 publish | in preparation: publish audit, history rewrite for the first commit, licence review, QA; a Windows release zip (with its own Python, nothing to install) is made by `scripts/make_release.py` |
 
 ## Deferred
 

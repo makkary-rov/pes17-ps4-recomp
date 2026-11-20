@@ -245,8 +245,16 @@ static int Start(HWND hwnd, const wchar_t *exe, const char *args) {
 }
 
 /* ---- the one-time preparation -------------------------------------------------------------- */
-/* The first of python, python3 and py that runs as Python 3. */
+/* The Python that does the preparation: the copy shipped in python\ next to the launcher (the release
+ * zip), else the first of python, python3 and py on PATH that runs as Python 3. */
 static const wchar_t *FindPython(void) {
+    static wchar_t bundled[MAX_PATH + 40];
+    wchar_t probe[MAX_PATH + 40];
+    swprintf(probe, MAX_PATH + 40, L"%ls\\python\\python.exe", g_exe_dir);
+    if (FileExistsW(probe)) {
+        swprintf(bundled, MAX_PATH + 40, L"\"%ls\"", probe);
+        return bundled;
+    }
     static const wchar_t *kNames[] = {L"python", L"python3", L"py"};
     for (int i = 0; i < 3; ++i) {
         wchar_t cmd[200];

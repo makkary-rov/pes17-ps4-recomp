@@ -103,3 +103,13 @@ Environment switches for diagnosis (all off or default unless set):
 | `PES_FRAME_STATS=1` | Print frame time, draw and stall statistics every 5 seconds. |
 | `PES_DOWNLOAD_STATS=1` | Print which images the linear readback copies. |
 | `PES_PROFILE=<thread names>` | Sampling profiler (Windows); stacks go to `PES_PROFILE_OUT`. Resolve with `llvm-symbolizer`. |
+
+## 7. The Windows release zip
+
+People who only want to play download a zip from the Releases page; nothing is installed or built. To make that zip (in the CLANG64 shell, after `./build.sh`):
+
+```
+python3 scripts/make_release.py --python-embed <python-3.x.y-embed-amd64.zip> --version 0.1.0
+```
+
+The embeddable Python package comes from python.org (Windows embeddable package, 64-bit); download it yourself and pass its path. The script copies the three programs, the DLLs they need (found with `objdump -p` in the MSYS2 `bin` folder), the preparation scripts, the licence texts and a `NOTICE-RELEASE.txt`, unpacks Python into `python\` (the launcher uses it before any Python on PATH) and writes `dist/2017RECOMP-<version>-windows.zip`. The zip contains no game files. Because the FFmpeg package is GPL-3.0-or-later, the zip as a whole is distributed under GPL-3.0-or-later terms; the source stays this repository.

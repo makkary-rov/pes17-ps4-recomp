@@ -9,7 +9,8 @@ No game files, keys or firmware are included or provided. You need your own lega
 
 ## Using it
 
-1. Build it (see BUILDING.md); the build produces `pes17launcher.exe`, `pes17settings.exe` and `pes17recomp.exe` in `out/`. You also need Python 3 (no extra packages) for the one-time preparation below.
+0. Easiest: download the Windows zip from the project's Releases page and unpack it anywhere. It holds the three programs, the libraries they need and a Python for the one-time preparation, so there is nothing to install or build; continue at step 2. (The zip is built by `scripts/make_release.py`, see BUILDING.md section 7.)
+1. Or build it yourself (see BUILDING.md); the build produces `pes17launcher.exe`, `pes17settings.exe` and `pes17recomp.exe` in `out/`. You also need Python 3 (no extra packages) for the one-time preparation below.
 2. Run the launcher. **Install** asks for the folder of your own PS4 game dump (the one with `eboot.bin`), remembers it, and prepares the game once (a few minutes; the three Python scripts in `scripts/` write their results to `game-data/` next to the launcher, with a log in `game-data/prepare.log`). **Play** starts the game (it prepares first if that has not been done); **Settings** opens the settings window (display, keyboard, controller, audio); **Exit** closes the launcher.
 3. Settings are kept in `pes17recomp.ini` next to the executables. Gameplay runs at 60 or 30 frames per second; pre-match cutscenes keep the game's own 30.
 
