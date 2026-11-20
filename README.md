@@ -3,6 +3,8 @@
 
 <img src="docs/header.png" alt="The definitive way to play it on PC!" width="100%">
 
+**Presenting 2017Recomp: The only way to play Konami's PES 2017 PS4 version on PC**
+
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Features](#features) · [FAQ](#faq) · [Documentation](#documentation) · [Credits](#credits) · [Disclaimer](#disclaimer)
 
 </div>
@@ -10,7 +12,7 @@
 ---
 
 > [!IMPORTANT]
-> This repository contains **no game files, keys or firmware**. You need your own legally obtained copy of the PS4 game (the folder that holds `eboot.bin`). Download releases only from this repository's Releases page.
+> This repository contains **no game files, keys or firmware**. You need your own legally obtained copy of the PS4 game **(CUSA04957)** (the folder that holds `eboot.bin`). Download releases only from this repository's Releases page. You may fork this work or use it to develop other games in the series with proper credits and under the GPL v2.0 license.
 
 ## Quick start
 
