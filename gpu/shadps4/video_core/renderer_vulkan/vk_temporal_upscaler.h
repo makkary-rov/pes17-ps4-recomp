@@ -12,6 +12,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -21,10 +22,12 @@
 #include "common/types.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/renderer_vulkan/vk_dlss.h"
+#include "video_core/renderer_vulkan/upscale_trigger.h"
 #include "video_core/renderer_vulkan/vk_fsr4.h"
 #include "video_core/texture_cache/image.h"
 
 struct FfxVkPortableUpscaleContext;
+struct FfxVkPortableFrameGenerationContext;
 
 namespace VideoCore {
 class TextureCache;
@@ -66,7 +69,18 @@ public:
     void OnSceneComposite();
 
     /// Before a compute dispatch: the post-processing combine shader triggers the upscale.
-    void OnDispatch(u64 cs_hash);
+    void OnDispatch(u64 cs_hash, bool reads_scene = false);
+    /// pes: before the first post-processing draw (UpscaleTrigger::Fires, upscale_trigger.h),
+    /// after its targets are known and before its textures are bound: the upscale runs here.
+    void OnSceneReader();
+    /// pes: whether this image has been an HDR scene colour target (this or an earlier frame).
+    [[nodiscard]] bool KnownSceneImage(VAddr address) const {
+        return scene_images.Contains(address);
+    }
+    /// Guest address of the scene colour target (0 before one is drawn this frame).
+    [[nodiscard]] VAddr SceneColorAddress() const;
+    /// Diagnostic (PES_FRAMEGEN=1): the compute shaders dispatched, printed every 300 frames.
+    void NoteDispatch(u64 cs_hash, u32 dim_x, u32 dim_y, u32 dim_z);
 
     /// Start of a frame in the command stream (display pass).
     bool OnFrameStart();
@@ -126,6 +140,14 @@ public:
         u32 width, height;
     };
     bool DisplayOverride(VAddr address, Display& display);
+    /// pes: frame generation (PES_FRAMEGEN=1, scaled FSR 3 presets): true once per game frame whose
+    /// scene was prepared for interpolation (the flag is consumed).
+    bool FrameGenFrameReady();
+    /// Records the interpolation of the previous and this game frame into the generated image
+    /// (General layout) after the game's UI is complete in the output-size image.
+    void RecordFrameGen(vk::CommandBuffer cmdbuf, vk::Image display);
+    /// The guest display buffer can be interpolated (format and size match the captured frame).
+    [[nodiscard]] bool FrameGenDisplayOk(vk::Format format, u32 width, u32 height) const;
     /// PES_PRESENT_DUMP_TRIGGER: whether this presented frame is to be saved (consumes the trigger).
     bool PresentDumpDue();
     /// Saves `image` (General layout, 4 bytes a pixel) as present_<w>x<h> in PES_DUMP_DIR.
@@ -197,7 +219,12 @@ private:
     bool failed = false;
     /// An FSR 3 dispatch recorded on a recording thread failed; `failed` at the next frame.
     std::atomic<bool> dispatch_failed{false};
-    u64 trigger_hash = 0x9a9cf8a9;
+    /// pes: an upstream title's post shader; PES posts with draws (OnSceneReader), so there is no
+    /// compute trigger by default. PES_UPSCALE_BEFORE_CS=<hash> still sets one (tests).
+    u64 trigger_hash = 0;
+    UpscaleTrigger::SceneImages scene_images;
+    /// The checks shared by both triggers, then Run().
+    void StartUpscale();
     VideoCore::ImageId scene_color{};
     bool done_this_frame = false;
     u32 preset_file_frames = 0; ///< PES_PRESET_FILE polling
@@ -208,12 +235,14 @@ private:
     std::array<float, 2> jitter{};
     u32 jitter_index = 0;
     bool reset = true;
+    struct ResetStats { u64 frames = 0, changed = 0, missed = 0, resets = 0; } reset_stats;
     u64 frame_id = 0;
     std::chrono::steady_clock::time_point last_frame{};
 
     u32 width = 0, height = 0;             ///< render size
     u32 out_width = 0, out_height = 0;     ///< output size of the context
     bool context_hdr = true;
+    bool context_inverted = false; ///< pes: created for reversed-Z depth
     u32 target_width = 1920, target_height = 1080; ///< output size of scaled presets
     u64 ui_trigger_vs = 0x34e8a281;
     VideoCore::ImageId ldr_target{};
@@ -271,6 +300,7 @@ private:
     vk::UniqueDescriptorSetLayout merge_desc_layout;
     vk::UniquePipelineLayout merge_pipeline_layout;
     vk::UniquePipeline merge_pipeline;
+    vk::UniquePipeline merge_pipeline_r11; ///< scene colour is R11G11B10F (PES)
     std::array<VideoCore::UniqueImage, 2> taa_history;
     std::array<vk::UniqueImageView, 2> taa_history_views;
     u32 taa_next = 0;
@@ -307,6 +337,41 @@ private:
     vk::UniqueImageView extra_sharpen_view;
     u32 extra_sharpen_width = 0, extra_sharpen_height = 0;
     vk::UniqueImageView ui_storage_view;
+    // pes: frame generation (FSR 3.1.6 analytical optical flow + interpolation).
+    bool EnsureFrameGen(u32 w, u32 h, u32 ow, u32 oh);
+    void DestroyFrameGen();
+    void RecordFrameGenPrepare(vk::Image source_image);
+    void FrameGenCapture();
+    /// This frame's upscale inputs (Run), kept for the Prepare at the UI trigger.
+    struct FgRun {
+        bool valid = false;
+        bool reduced = false;
+        vk::Image depth;
+        vk::Format depth_format{};
+        vk::ImageUsageFlags depth_usage{};
+        u32 w = 0, h = 0;
+        float frame_ms = 16.6f;
+        bool reset = false;
+        std::array<float, 2> jitter{};
+    } fg_run;
+    struct DispatchNote {
+        u64 count = 0;
+        u32 x = 0, y = 0, z = 0;
+    };
+    std::mutex note_mutex;
+    std::unordered_map<u64, DispatchNote> dispatch_notes;
+    FfxVkPortableFrameGenerationContext* fg_context = nullptr;
+    VideoCore::UniqueImage fg_hudless;   ///< the upscaled scene before the UI (copy)
+    VideoCore::UniqueImage fg_generated; ///< the interpolated frame (output size)
+    VideoCore::UniqueImage fg_current;   ///< copy of the finished display buffer (scene + UI)
+    std::mutex fg_mutex;                 ///< recording threads share the context
+    std::atomic<bool> fg_frame_ready{false};
+    std::atomic<bool> fg_failed{false};
+    u32 fg_render_w = 0, fg_render_h = 0, fg_width = 0, fg_height = 0;
+    u64 fg_next_id = 1, fg_id = 0, fg_generated_count = 0;
+    bool fg_reset = false;
+    bool fg_had_frame = false; ///< a previous game frame went through Prepare (else: reset)
+    float fg_ms = 16.6f, fg_near = 0.1f, fg_far = 3000.0f, fg_fov = 1.0f;
 };
 
 } // namespace Vulkan

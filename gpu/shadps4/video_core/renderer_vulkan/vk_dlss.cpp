@@ -35,6 +35,7 @@ constexpr unsigned long long kApplicationId = 231313132; // NVIDIA's id for unre
 enum DlssFlags : int {
     FlagIsHdr = 1 << 0,
     FlagMvLowRes = 1 << 1,
+    FlagDepthInverted = 1 << 3, ///< NVSDK_NGX_DLSS_Feature_Flags_DepthInverted
     FlagAutoExposure = 1 << 6,
 };
 // NVSDK_NGX_PerfQuality_Value
@@ -220,6 +221,7 @@ struct DlssUpscaler::Impl {
         int quality;
         int model;
         bool hdr;
+        bool depth_inverted;
         bool operator==(const Key&) const = default;
     } key{};
     int requested_model = 0;
@@ -410,7 +412,8 @@ struct DlssUpscaler::Impl {
             return false;
         }
         const Key wanted{f.render_width, f.render_height, f.output.width, f.output.height,
-                         Quality(f.preset), requested_model, IsFloatFormat(f.color.format)};
+                         Quality(f.preset), requested_model, IsFloatFormat(f.color.format),
+                         f.depth_inverted};
         bool fresh_history=false;
         if (!feature || !(wanted == key)) {
             if (feature) {
@@ -435,8 +438,8 @@ struct DlssUpscaler::Impl {
             SetUI(params, "OutWidth", wanted.out_width);
             SetUI(params, "OutHeight", wanted.out_height);
             SetI(params, "PerfQualityValue", wanted.quality);
-            // Motion vectors at render resolution, without jitter; standard depth.
-            int flags = FlagMvLowRes;
+            // Motion vectors at render resolution, without jitter; pes: PES draws reversed Z.
+            int flags = FlagMvLowRes | (wanted.depth_inverted ? FlagDepthInverted : 0);
             if (wanted.hdr) {
                 flags |= FlagIsHdr | FlagAutoExposure;
             }

@@ -32,7 +32,7 @@ public:
     }
 
     using DrawInfo = Motion::Draw;
-    u32 PrepareDraw(const DrawInfo& draw);
+    u32 PrepareDraw(const DrawInfo& draw, bool unique_only = false);
     /// Small skeletons: whether the bone palette changed (Motion::History::Moving).
     bool Moving(const Motion::History::GateKey& key, u64 palette) {
         return history.Moving(key, palette);
@@ -53,7 +53,10 @@ public:
 
     /// The motion image for the compose pass (layout General after this call) and whether it
     /// holds this frame's vectors at `width` x `height`.
-    vk::ImageView PrepareRead(u32 width, u32 height, bool& valid);
+    /// pes: `object_size` receives the image's size: the G-buffer (and its vectors, in its
+    /// pixels) may be drawn at another resolution than the upscaler's input.
+    vk::ImageView PrepareRead(u32 width, u32 height, bool& valid,
+                              std::array<u32, 2>* object_size = nullptr);
     /// The image of the last PrepareRead (layout General), or null.
     [[nodiscard]] vk::ImageView View() const noexcept {
         return read_target && read_target->view ? *read_target->view : vk::ImageView{};

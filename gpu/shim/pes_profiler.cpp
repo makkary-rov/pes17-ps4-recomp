@@ -72,7 +72,7 @@ void Refresh(std::vector<Target>& targets, const std::vector<std::string>& parts
             LocalFree(desc);
         }
         const bool match = std::any_of(parts.begin(), parts.end(),
-                                       [&](const std::string& p) { return name.find(p) != std::string::npos; });
+                                       [&](const std::string& p) { return p == "*" || name.find(p) != std::string::npos; });
         if (match) {
             targets.push_back({te.th32ThreadID, h, name});
             std::printf("Profiler: sampling thread %lu '%s'\n", te.th32ThreadID, name.c_str());
@@ -94,7 +94,22 @@ int Walk(HANDLE thread, uint64_t* pcs) {
         pcs[n++] = ctx.Rip;
         DWORD64 base = 0;
         PRUNTIME_FUNCTION fe = RtlLookupFunctionEntry(ctx.Rip, &base, nullptr);
-        if (!fe) break; // a leaf or code without unwind data (guest code): stop here
+        if (!fe) {
+            // Code without unwind data (guest code): follow its rbp frame chain (return address
+            // at rbp+8, caller's rbp at rbp), enough to see which guest functions called down.
+            uint64_t rbp = ctx.Rbp;
+            while (n < kDepth && rbp && !(rbp & 7)) {
+                uint64_t frame[2] = {};
+                SIZE_T got = 0;
+                if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(rbp), frame, sizeof(frame),
+                                       &got) || got != sizeof(frame) || !frame[1] || frame[0] <= rbp) {
+                    break;
+                }
+                pcs[n++] = frame[1];
+                rbp = frame[0];
+            }
+            break;
+        }
         PVOID handler_data = nullptr;
         DWORD64 establisher = 0;
         RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, fe, &ctx, &handler_data, &establisher, nullptr);

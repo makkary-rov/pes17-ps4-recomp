@@ -76,10 +76,106 @@ static DWORD WINAPI state_observer(void *unused) {
         }
     }
 }
+/* PES_WATCH="<hex offset>:<size 1|2|4|8>,..." (diagnostic, off by default): every 100 ms the listed image
+ * offsets are read (read-only, ReadProcessMemory) and every change is printed as "Watch: t=<s> <offset>=<hex>". */
+#define WATCH_MAX 16
+static struct { uint64_t offset, last; unsigned size; int seen; } watches[WATCH_MAX];
+static unsigned watch_count;
+static DWORD WINAPI watch_thread(void *unused) {
+    (void)unused;
+    ULONGLONG start = GetTickCount64();
+    for (;;) {
+        Sleep(100);
+        for (unsigned i = 0; i < watch_count; ++i) {
+            uint64_t value = 0;
+            SIZE_T got = 0;
+            if (watches[i].offset + watches[i].size > observer_image_size) continue;
+            if (!ReadProcessMemory(GetCurrentProcess(), image + watches[i].offset, &value, watches[i].size, &got)
+                || got != watches[i].size) continue;
+            if (watches[i].seen && value == watches[i].last) continue;
+            watches[i].seen = 1;
+            watches[i].last = value;
+            printf("Watch: t=%.1f %" PRIx64 "=%" PRIx64 "\n", (GetTickCount64() - start) / 1000.0, watches[i].offset, value);
+            fflush(stdout);
+        }
+    }
+}
+static void start_watch(void) {
+    const char *spec = getenv("PES_WATCH");
+    if (!spec || !spec[0]) return;
+    while (*spec && watch_count < WATCH_MAX) {
+        char *end = NULL;
+        uint64_t offset = strtoull(spec, &end, 16);
+        if (end == spec || *end != ':') break;
+        unsigned size = (unsigned)strtoul(end + 1, &end, 10);
+        if (size != 1 && size != 2 && size != 4 && size != 8) break;
+        watches[watch_count].offset = offset;
+        watches[watch_count].size = size;
+        ++watch_count;
+        if (*end != ',') break;
+        spec = end + 1;
+    }
+    if (!watch_count) return;
+    HANDLE h = CreateThread(NULL, 0, watch_thread, NULL, 0, NULL);
+    if (h) CloseHandle(h);
+}
+/* PES_SNAP_DIR=<dir> (diagnostic, off by default): a host thread polls the folder; each "<name>.snap" file
+ * found there makes it write the whole guest image as "<name>.bin" (read-only, ReadProcessMemory; unreadable
+ * chunks stay zero) and rename the trigger to "<name>.done". scripts/snapdiff.py compares two dumps. */
+static char snap_dir[MAX_PATH];
+static DWORD WINAPI snap_thread(void *unused) {
+    (void)unused;
+    for (;;) {
+        Sleep(200);
+        char pattern[MAX_PATH + 16];
+        snprintf(pattern, sizeof(pattern), "%s\\*.snap", snap_dir);
+        WIN32_FIND_DATAA fd;
+        HANDLE find = FindFirstFileA(pattern, &fd);
+        if (find == INVALID_HANDLE_VALUE) continue;
+        do {
+            char name[MAX_PATH], trigger[MAX_PATH * 2], out[MAX_PATH * 2], done[MAX_PATH * 2];
+            snprintf(name, sizeof(name), "%s", fd.cFileName);
+            name[strlen(name) - 5] = 0;
+            snprintf(trigger, sizeof(trigger), "%s\\%s.snap", snap_dir, name);
+            snprintf(out, sizeof(out), "%s\\%s.bin", snap_dir, name);
+            snprintf(done, sizeof(done), "%s\\%s.done", snap_dir, name);
+            FILE *f = fopen(out, "wb");
+            if (f) {
+                enum { CHUNK = 1 << 20 };
+                static unsigned char buffer[CHUNK];
+                for (uint64_t at = 0; at < observer_image_size; at += CHUNK) {
+                    size_t want = observer_image_size - at < CHUNK ? (size_t)(observer_image_size - at) : CHUNK, got = 0;
+                    if (!ReadProcessMemory(GetCurrentProcess(), image + at, buffer, want, &got) || got != want) {
+                        memset(buffer, 0, want);
+                        for (size_t page = 0; page < want; page += 4096) {
+                            size_t part = want - page < 4096 ? want - page : 4096;
+                            ReadProcessMemory(GetCurrentProcess(), image + at + page, buffer + page, part, &got);
+                        }
+                    }
+                    fwrite(buffer, 1, want, f);
+                }
+                fclose(f);
+                printf("Snapshot: %s (%" PRIu64 " bytes)\n", out, observer_image_size);
+                fflush(stdout);
+            }
+            MoveFileExA(trigger, done, MOVEFILE_REPLACE_EXISTING);
+        } while (FindNextFileA(find, &fd));
+        FindClose(find);
+    }
+}
+static void start_snapshots(void) {
+    const char *dir = getenv("PES_SNAP_DIR");
+    if (!dir || !dir[0] || strlen(dir) >= sizeof(snap_dir)) return;
+    snprintf(snap_dir, sizeof(snap_dir), "%s", dir);
+    HANDLE h = CreateThread(NULL, 0, snap_thread, NULL, 0, NULL);
+    if (h) CloseHandle(h);
+}
 static void start_state_observer(uint64_t image_size) {
+    observer_image_size = image_size;
+    start_watch();
+    start_snapshots();
     const char *observer = getenv("PES_OBSERVER"); /* off by default: verify_M5/M6 set it */
     if (!observer || observer[0] != '1') return;
-    observer_image_size = image_size;
     HANDLE h = CreateThread(NULL, 0, state_observer, NULL, 0, NULL);
     if (h) CloseHandle(h);
 }

@@ -26,6 +26,7 @@ layout(push_constant) uniform Constants {
     vec2 previous_jitter;
     uint mode;         // motion: 1 = object motion vectors available; debug: 0 motion, 1 raw
                        // depth, 2 view z / 50, 3 reprojected previous frame, 4 |difference|
+    vec2 object_size;  // pes: pixels of object_tex (the G-buffer may be drawn at another size)
 };
 
 void main() {
@@ -45,8 +46,10 @@ void main() {
     const vec2 ndc = vec2(scene_uv.x * 2.0 - 1.0, scene_uv.y * 2.0 - 1.0);
 
     // Clip z = zs * z + zo, w = z; depth = zs + zo / z (zo < 0, depth < zs in front).
-    const bool sky = depth >= 1.0;
-    const float denom = min(depth - proj.z, -1e-8);
+    // pes: bit 8 of `mode`: reversed-Z projection (near = 1, far -> 0, zo > 0: depth = zs + zo / z).
+    const bool reversed = (mode & 256u) != 0u;
+    const bool sky = reversed ? depth <= 1e-7 : depth >= 1.0;
+    const float denom = reversed ? max(depth - proj.z, 1e-8) : min(depth - proj.z, -1e-8);
     const float z = sky ? 1.0 : proj.w / denom;
     // Clear depth is an infinite direction: rotate it with the camera, without translation.
     // A threshold below 1 incorrectly classified distant geometry as motionless sky.
@@ -88,8 +91,13 @@ void main() {
     imageStore(color_img, pixel, vec4(mix(current.rgb, mv_color, 0.75), current.a));
 #else
     vec2 result = motion;
-    if (mode == 1) {
-        const vec4 object_motion = texelFetch(object_tex, pixel, 0);
+    if ((mode & 255u) == 1u) {
+        // pes: the object vectors are in pixels of their own image; sample the same scene
+        // point and convert to this pass's pixels.
+        const ivec2 object_pixel = min(ivec2((vec2(pixel) + 0.5) * object_size / size),
+                                       ivec2(object_size) - 1);
+        vec4 object_motion = texelFetch(object_tex, object_pixel, 0);
+        object_motion.rg *= size / object_size;
         // A later ordinary draw may have covered this pixel without touching the motion
         // target. Its final depth then differs from the depth stored with the vector.
         // Both depths are full precision. Do not accept an old foreground vector merely

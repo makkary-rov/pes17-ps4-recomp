@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "video_core/renderer_vulkan/vk_camera_motion.h"
+#include "video_core/renderer_vulkan/motion_history.h"
 
 #include <chrono>
 #include <cmath>
@@ -30,6 +31,8 @@ struct PushConstants {
     std::array<float, 2> jitter;
     std::array<float, 2> previous_jitter;
     u32 mode;
+    u32 pad;
+    std::array<float, 2> object_size; ///< pixels of the object motion image
 };
 
 /// a * b for 3x4 affine matrices (rows [R | t]).
@@ -180,8 +183,14 @@ float CameraMotion::VerticalFov() const noexcept {
 }
 
 float CameraMotion::Near() const noexcept {
-    // depth = zs + zo / z is 0 at the near plane.
-    return -current.proj[3] / current.proj[2];
+    // pes: depth = zs + zo / z is 0 at the near plane only for standard Z; PES is reversed.
+    return Motion::PlanesFromProjection(current.proj[2], current.proj[3], current.reversed)
+        .near_plane;
+}
+
+float CameraMotion::Far() const noexcept {
+    return Motion::PlanesFromProjection(current.proj[2], current.proj[3], current.reversed)
+        .far_plane;
 }
 
 void CameraMotion::PrintState(int frame) const {
@@ -220,8 +229,21 @@ void CameraMotion::RecordMotion(vk::ImageView depth_view, vk::ImageView motion_v
                                 u32 height) {
     CommitFrameCamera();
     bool object_valid = false;
+    std::array<u32, 2> object_size{width, height};
     const vk::ImageView object_view = object_motion && object_motion->Enabled()
-        ? object_motion->PrepareRead(width, height, object_valid) : depth_view;
+        ? object_motion->PrepareRead(width, height, object_valid, &object_size) : depth_view;
+    {
+        // pes: proof that the object vectors reach the upscaler (they silently did not while
+        // the G-buffer was drawn at 1920x1080 and the upscaler ran at the preset size).
+        static u64 records = 0, used = 0;
+        used += object_valid ? 1 : 0;
+        if (++records == 300 || records % 3600 == 0) {
+            std::printf("Camera motion: object vectors used in %llu of %llu frames (%ux%u read "
+                        "at %ux%u)\n", (unsigned long long)used, (unsigned long long)records,
+                        object_size[0], object_size[1], width, height);
+            std::fflush(stdout);
+        }
+    }
     const PushConstants push{
         .reproject = Multiply(previous.view, current.inv_view),
         .proj = current.proj,
@@ -229,7 +251,9 @@ void CameraMotion::RecordMotion(vk::ImageView depth_view, vk::ImageView motion_v
         .size = {float(width), float(height)},
         .jitter = jitter,
         .previous_jitter = previous_jitter,
-        .mode = object_valid ? 1u : 0u,
+        .mode = (object_valid ? 1u : 0u) | (current.reversed ? 256u : 0u),
+        .pad = 0,
+        .object_size = {float(object_size[0]), float(object_size[1])},
     };
     // pes: everything the pass reads is captured: it may be recorded on a recording thread
     // while this thread goes on with the next frame's camera.
@@ -263,7 +287,50 @@ void CameraMotion::RecordMotion(vk::ImageView depth_view, vk::ImageView motion_v
     });
 }
 
-void CameraMotion::OnConstants(const float* data) {
+void CameraMotion::OnPesConstants(const float* data) {
+    // PES 2017 scene constants, 480 bytes (row-major 4x4 blocks): [0] view-projection, [64] projection
+    // (x scale, y scale, reversed Z: zs = m22, zo = m23, last row 0 0 1 0), [128] view (3x4 rows plus 0 0 0 1).
+    if (pass_has_camera) {
+        return;
+    }
+    const float* proj = data + 16;
+    const float* view = data + 32;
+    const bool projection_ok = std::isfinite(proj[0]) && std::isfinite(proj[5]) && std::abs(proj[0]) > 1e-4f &&
+                               std::abs(proj[5]) > 1e-4f && std::abs(proj[14] - 1.0f) < 1e-4f &&
+                               std::abs(proj[15]) < 1e-6f && std::abs(proj[12]) < 1e-6f &&
+                               std::abs(proj[13]) < 1e-6f;
+    const float row0 = view[0] * view[0] + view[1] * view[1] + view[2] * view[2];
+    const bool view_ok = std::abs(row0 - 1.0f) < 1e-2f && std::abs(view[12]) < 1e-6f &&
+                         std::abs(view[13]) < 1e-6f && std::abs(view[14]) < 1e-6f &&
+                         std::abs(view[15] - 1.0f) < 1e-6f;
+    if (!projection_ok || !view_ok) {
+        return;
+    }
+    std::memcpy(pass_camera.view.data(), view, 12 * sizeof(float));
+    pass_camera.inv_view = InverseAffine(pass_camera.view);
+    pass_camera.proj = {proj[0] * gbuffer_x_sign, proj[5] * gbuffer_y_sign, proj[10], proj[11]};
+    pass_camera.reversed = proj[11] > 0.0f;
+    pass_camera.valid = true;
+    static std::array<float, 4> last_proj{};
+    if (pass_camera.proj != last_proj) {
+        last_proj = pass_camera.proj;
+        std::printf("Camera motion: PES projection x %.4f y %.4f zs %.6f zo %.6f (reversed %d), G-buffer "
+                    "viewport x %s y %s\n",
+                    pass_camera.proj[0], pass_camera.proj[1], pass_camera.proj[2], pass_camera.proj[3],
+                    int(pass_camera.reversed), gbuffer_x_sign < 0.0f ? "flipped" : "not flipped",
+                    gbuffer_y_sign < 0.0f ? "flipped" : "not flipped");
+        std::fflush(stdout);
+    }
+    render_size = {1920, 1080};
+    pass_has_camera = true;
+    frame_has_camera = true;
+}
+
+void CameraMotion::OnConstants(const float* data, u32 bytes) {
+    if (bytes == 480) {
+        OnPesConstants(data);
+        return;
+    }
     // Scene constants: far plane 3000, 1/far, and the render size.
     if (data[0] != 3000.0f || data[4] < 64.0f || data[5] < 64.0f ||
         std::abs(data[1] * data[0] - 1.0f) > 1e-3f) {

@@ -61,6 +61,12 @@ public:
     /// Vertical field of view and near/far planes of the current camera.
     [[nodiscard]] float VerticalFov() const noexcept;
     [[nodiscard]] float Near() const noexcept;
+    /// pes: far plane (reversed Z aware); 1e6 for an infinite projection.
+    [[nodiscard]] float Far() const noexcept;
+    /// pes: the current camera uses reversed Z (PES: always).
+    [[nodiscard]] bool Reversed() const noexcept {
+        return current.reversed;
+    }
     // Current projection, previous projection, and row Z of previous-view * inverse-view.
     [[nodiscard]] std::array<std::array<float, 4>, 3> TaaDepthParameters() const noexcept;
     /// pes: the matrices and jitter of the motion of this frame, printed with an upscaler dump
@@ -72,7 +78,7 @@ public:
     void RecordMotion(vk::ImageView depth_view, vk::ImageView motion_view, u32 width, u32 height);
 
     /// A bound constant buffer of 864 bytes: checks the scene constant signature.
-    void OnConstants(const float* data);
+    void OnConstants(const float* data, u32 bytes = 864);
 
     /// The G-buffer pass (5+ color targets): its depth is the scene depth.
     /// `x_sign`/`y_sign`: signs of the G-buffer pass's viewport x/y scale (window = ndc * scale +
@@ -90,6 +96,7 @@ private:
         std::array<float, 12> inv_view{}; ///< view to world, 3x4 rows
         std::array<float, 4> proj{};      ///< x scale, y scale, z scale, z offset
         bool valid = false;
+        bool reversed = false; ///< reversed-Z projection (PES: zo > 0)
     };
 
     void Overlay(VideoCore::ImageId frame);
@@ -115,6 +122,8 @@ private:
     u32 frame_gbuffer_passes = 0;
     std::array<std::array<float, 3>, 4> pass_positions{};
     void CommitFrameCamera();
+    /// PES 2017 scene constants (480 bytes): see OnConstants.
+    void OnPesConstants(const float* data);
     std::array<float, 2> jitter{}, previous_jitter{};
     std::array<u32, 2> render_size{};
     VideoCore::ImageId depth_id{};

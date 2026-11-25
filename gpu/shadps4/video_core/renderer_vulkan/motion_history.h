@@ -39,9 +39,17 @@ VertexRange IndexedRange(std::span<const Index, Extent> indices, int32_t base_ve
 // Vertex shader constant buffers (stride 16) of the upstream title's G-buffer shaders: the 864-byte
 // scene constants (camera), 416-byte model constants and palettes of 3x4 bone matrices
 // (48 bytes per bone). Characters have 656+ bytes; weapons and props 2-8 bones (96-384).
+// pes: every PES G-buffer shader binds the 480-byte camera constants (never a palette) and
+// 272-byte object constants. Those hold camera-space matrices (PES_CONST_ROWS: rows 0-2 and
+// 4-6 change with the camera), so they change for every draw while the camera moves; they
+// still mark rigid objects such as the ball for history, and History::Prepare(unique_only)
+// keeps repeated meshes (LED panels) on camera vectors. Players: 3072-byte skeletons.
 enum class BufferRole { Other, Skeleton, SmallSkeleton };
 inline BufferRole ClassifyBuffer(uint32_t size) {
-    if (size == 864 || size > 16384) {
+    if (size == 272) {
+        return BufferRole::SmallSkeleton;
+    }
+    if (size == 480 || size == 864 || size > 16384) {
         return BufferRole::Other;
     }
     if (size >= 640) {
@@ -211,6 +219,31 @@ inline uint32_t JitterPhases(uint32_t render_width, uint32_t output_width) {
     return uint32_t(std::clamp(std::ceil(8.0 * ratio * ratio), 8.0, 256.0));
 }
 
+// pes: scene draws are jittered only while the upscale actually resolves frames (a dispatch in
+// the previous frame). Jitter that no pass resolves reaches the screen as shimmer.
+constexpr bool JitterAllowed(bool jitter_on, bool resolved_last_frame) {
+    return jitter_on && resolved_last_frame;
+}
+
+struct ClipPlanes {
+    float near_plane, far_plane;
+};
+// pes: near and far planes of a projection whose depth is zs + zo / z (view z forward).
+// Standard Z: depth 0 at near, 1 at far. Reversed Z (PES): 1 at near, 0 at far; zs == 0 is
+// an infinite far plane, reported as 1e6. The upstream formula -zo / zs is the far plane
+// under reversed Z (PES's broadcast camera: about 4000, which FSR rejected as "near").
+inline ClipPlanes PlanesFromProjection(float zs, float zo, bool reversed) {
+    constexpr float infinite = 1.0e6f;
+    if (reversed) {
+        const float near_plane = zo / (1.0f - zs);
+        const float far_plane = zs < 0.0f ? -zo / zs : infinite;
+        return {near_plane, std::min(far_plane, infinite)};
+    }
+    const float near_plane = zs != 0.0f ? -zo / zs : 0.0f;
+    const float far_plane = 1.0f - zs != 0.0f ? zo / (1.0f - zs) : infinite;
+    return {near_plane, far_plane};
+}
+
 struct Draw {
     uint64_t shader{}, geometry{}, indices{}, topology{};
     uint32_t index_count{}, instances{}, first_instance{};
@@ -229,6 +262,7 @@ public:
     };
     struct Stats {
         uint64_t draws{}, stored{}, loaded{}, unmatched{}, exhausted{}, invalid{}, still{};
+        uint64_t repeated{}; ///< loads refused: the same draw repeats within a frame
     } stats;
 
     // A small skeleton (weapon, prop; most are static world pieces) only needs history
@@ -253,6 +287,7 @@ public:
     void NextFrame() {
         previous.swap(current);
         current.clear();
+        previous_occurrences.swap(occurrences);
         occurrences.clear();
         gate_previous.swap(gate_current);
         gate_current.clear();
@@ -261,10 +296,15 @@ public:
         used = 0;
     }
 
-    Allocation Prepare(const Draw& draw) {
+    // pes: `unique_only`: a draw that repeats within a frame (one mesh drawn for many LED
+    // panels or seats, in an order that changes) is matched to last frame's N-th repetition,
+    // which may be another panel: wrong vectors, flicker. Such draws get no history.
+    Allocation Prepare(const Draw& draw, bool unique_only = false) {
         ++stats.draws;
         Key key{draw, 0};
+        const auto* last_count = previous_occurrences.find(key);
         key.occurrence = occurrences[key]++;
+        const bool repeats = key.occurrence > 0 || (last_count && *last_count > 1);
         const uint64_t count = uint64_t(draw.vertices.count) * draw.instances;
         if (!count || uint64_t(draw.vertices.first) + draw.vertices.count - 1 > INT32_MAX ||
             uint64_t(draw.first_instance) + draw.instances > UINT32_MAX) {
@@ -274,7 +314,9 @@ public:
         const auto* prev = previous.find(key);
         Allocation result{0, 0, draw.vertices.count, draw.instances,
                           draw.vertices.first, draw.first_instance};
-        if (prev) {
+        if (prev && unique_only && repeats) {
+            ++stats.repeated;
+        } else if (prev) {
             result.load = *prev;
             ++stats.loaded;
         } else {
@@ -312,7 +354,7 @@ private:
     };
     uint32_t capacity{}, used{};
     uint64_t frame{};
-    FlatMap<Key, uint32_t, Hash> previous, current, occurrences;
+    FlatMap<Key, uint32_t, Hash> previous, current, occurrences, previous_occurrences;
     struct GateHash {
         size_t operator()(const GateKey& key) const {
             uint64_t h = 0;

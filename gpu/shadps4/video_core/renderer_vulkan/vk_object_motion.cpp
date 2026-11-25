@@ -171,12 +171,12 @@ void ObjectMotion::OnFrameStart() {
     if (PesStats::enabled && (frame % 600) == 0 && history.stats.draws) {
         const auto& s = history.stats;
         std::printf("Object motion: %llu draws, %llu stored, %llu with history, %llu unmatched, "
-                    "%llu capacity skips, %llu invalid, %llu still (600 frames); last frame %u/%u vertices; "
+                    "%llu capacity skips, %llu invalid, %llu still, %llu repeated (600 frames); last frame %u/%u vertices; "
                     "index ranges %llu reused, %llu scanned (%llu found changed), %zu cached\n",
                     (unsigned long long)s.draws, (unsigned long long)s.stored,
                     (unsigned long long)s.loaded, (unsigned long long)s.unmatched,
                     (unsigned long long)s.exhausted, (unsigned long long)s.invalid,
-                    (unsigned long long)s.still,
+                    (unsigned long long)s.still, (unsigned long long)s.repeated,
                     history.Used(), PositionsPerFrame, (unsigned long long)index_ranges.stats.hits,
                     (unsigned long long)index_ranges.stats.scans,
                     (unsigned long long)index_ranges.stats.stale, index_ranges.Size());
@@ -212,11 +212,11 @@ void ObjectMotion::OnFrameStart() {
     });
 }
 
-u32 ObjectMotion::PrepareDraw(const DrawInfo& draw) {
+u32 ObjectMotion::PrepareDraw(const DrawInfo& draw, bool unique_only) {
     if (!enabled || PesToggle::Disabled(1u << 29) || params_used >= ParamsPerFrame) {
         return 0;
     }
-    const auto allocation = history.Prepare(draw);
+    const auto allocation = history.Prepare(draw, unique_only);
     u32 flags = (allocation.store ? Shader::MotionVectors::FlagStore : 0) |
                 (allocation.load ? Shader::MotionVectors::FlagLoad : 0);
     if (!flags) {
@@ -330,7 +330,8 @@ void ObjectMotion::Attach(RenderState& state, u32 width, u32 height) {
     state.num_color_attachments = std::max<u16>(state.num_color_attachments, slot + 1);
 }
 
-vk::ImageView ObjectMotion::PrepareRead(u32 width, u32 height, bool& valid) {
+vk::ImageView ObjectMotion::PrepareRead(u32 width, u32 height, bool& valid,
+                                        std::array<u32, 2>* object_size) {
     // The image of this size; otherwise any image (the pass binds one, its vectors unused).
     Target* target = const_cast<Target*>(Find(width, height));
     if (!target) {
@@ -343,7 +344,14 @@ vk::ImageView ObjectMotion::PrepareRead(u32 width, u32 height, bool& valid) {
     if (!target) {
         target = &GetTarget(1, 1);
     }
-    valid = target->written && width == target->width && height == target->height;
+    if (object_size) {
+        // pes: any written image of the same aspect: the compose pass rescales the vectors.
+        *object_size = {target->width, target->height};
+        valid = target->written &&
+                u64(width) * target->height == u64(height) * target->width;
+    } else {
+        valid = target->written && width == target->width && height == target->height;
+    }
     const vk::ImageMemoryBarrier2 barrier{
         .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
         .srcAccessMask = vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite,

@@ -627,11 +627,19 @@ bool PipelineCache::RefreshGraphicsKey(PipelineSelection& sel) {
     // ordinary stage variant is needed first to inspect the vertex shader's resources.
     bool motion_possible = false;
     {
-        u32 bound = 0;
+        u32 bound = 0, rgba8 = 0;
         for (s32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS && !skip_cb_binding; ++cb) {
-            bound += (regs.color_buffers[cb] && regs.color_target_mask.GetMask(cb)) ? 1 : 0;
+            const auto& col_buf = regs.color_buffers[cb];
+            if (!col_buf || !regs.color_target_mask.GetMask(cb)) continue;
+            ++bound;
+            rgba8 += col_buf.GetDataFmt() == AmdGpu::DataFormat::Format8_8_8_8 &&
+                             col_buf.GetNumberFmt() == AmdGpu::NumberFormat::Unorm
+                         ? 1 : 0;
         }
-        motion_possible = object_motion_enabled && bound >= 5 &&
+        // pes: the PES G-buffer is 3 RGBA8 targets with depth (the rasterizer's pes_gbuffer);
+        // the upstream rule (5+ targets) left every PES draw without object motion.
+        const bool pes_gbuffer = bound == 3 && rgba8 == 3;
+        motion_possible = object_motion_enabled && (bound >= 5 || pes_gbuffer) &&
                           !regs.color_buffers[Shader::MotionVectors::Output] &&
                           regs.depth_buffer.DepthValid() &&
                           regs.depth_buffer.NumSamples() == 1 && !regs.IsClipDisabled() &&

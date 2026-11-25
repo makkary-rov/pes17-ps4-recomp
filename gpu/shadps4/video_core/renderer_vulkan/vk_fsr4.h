@@ -40,6 +40,7 @@ public:
         float frame_ms, near_plane, far_plane, vertical_fov;
         float sharpness;
         bool sharpen, reset, auto_exposure;
+        bool depth_inverted = false; ///< pes: reversed Z (near 1, far 0), as PES draws
     };
 
     /// Records FSR 4 into `frame.cmdbuf`; the output stays in General. False when FSR 4

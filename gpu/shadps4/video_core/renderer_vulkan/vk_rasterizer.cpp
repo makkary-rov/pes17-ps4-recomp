@@ -7,6 +7,8 @@
 #include "pes_aniso.h"
 #include "pes_platform.h"
 #include <map>
+#include <mutex>
+#include <string>
 #include <unordered_set>
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
@@ -590,11 +592,63 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
     }
     // pes: the G-buffer pass (5+ color targets) holds the scene depth, and its constants the
     // main camera (shadow passes bind the same layout with the light's camera).
-    gbuffer_draw = camera_motion->Enabled() && std::popcount(key.mrt_mask) >= 5 && db_desc.first;
+    // pes: the main-scene G-buffer pass: 5+ colour targets upstream; PES draws 3 RGBA8 1920x1080 targets with
+    // the scene depth (PES_DISCOVER, docs: HANDOFF-0.2).
+    bool pes_gbuffer = false;
+    if (std::popcount(key.mrt_mask) == 3 && db_desc.first && cb_descs[0].first) {
+        const auto& c0 = texture_cache.GetImage(cb_descs[0].first);
+        const auto& d0 = texture_cache.GetImage(db_desc.first);
+        pes_gbuffer = c0.info.pixel_format == vk::Format::eR8G8B8A8Unorm && c0.info.size.width == 1920 &&
+                      c0.info.size.height == 1080 && d0.info.size.width == 1920 &&
+                      d0.info.size.height == 1080;
+    }
+    gbuffer_draw = camera_motion->Enabled() && (std::popcount(key.mrt_mask) >= 5 || pes_gbuffer) &&
+                   db_desc.first;
     if (gbuffer_draw) {
         const auto& vp = regs.viewports[0];
         camera_motion->OnGBufferPass(db_desc.first, vp.xscale < 0.0f ? -1.0f : 1.0f,
                                      vp.yscale < 0.0f ? -1.0f : 1.0f);
+    }
+    {
+        // pes: PES_DISCOVER=1 (diagnostic): what the game draws, aggregated: colour targets, the
+        // first target's format and size, depth, blending and index count class; printed every
+        // 20000 draws. For porting the upscaler's scene detection to this title.
+        static const bool discover = std::getenv("PES_DISCOVER") != nullptr;
+        discover_draw = false;
+        if (discover) {
+            static std::mutex discover_mutex;
+            static std::map<std::string, u64> seen;
+            static u64 draws = 0;
+            char text[200];
+            u32 fmt = 0, w = 0, h = 0, dw = 0, dh = 0;
+            if (cb_descs[0].first) {
+                const auto& c = texture_cache.GetImage(cb_descs[0].first);
+                fmt = u32(c.info.pixel_format);
+                w = c.info.size.width;
+                h = c.info.size.height;
+            }
+            if (db_desc.first) {
+                const auto& d = texture_cache.GetImage(db_desc.first);
+                dw = d.info.size.width;
+                dh = d.info.size.height;
+            }
+            discover_draw = std::popcount(key.mrt_mask) == 3 && fmt == 37 && w == 1920 && h == 1080 &&
+                            dw == 1920 && dh == 1080;
+            std::snprintf(text, sizeof(text), "targets %d fmt %u %ux%u depth %ux%u blend %d idx%s",
+                          std::popcount(key.mrt_mask), fmt, w, h, dw, dh,
+                          int(regs.blend_control[0].enable),
+                          regs.num_indices <= 6 ? "<=6" : ">6");
+            std::scoped_lock lock{discover_mutex};
+            ++seen[text];
+            if (++draws % 20000 == 0) {
+                std::printf("Discover: %llu draws\n", (unsigned long long)draws);
+                for (const auto& [name, count] : seen) {
+                    std::printf("Discover: %6llu  %s\n", (unsigned long long)count, name.c_str());
+                }
+                std::fflush(stdout);
+                seen.clear();
+            }
+        }
     }
     if (upscaler->Enabled() && cb_descs[0].first) {
         upscaler->OnColorTarget(cb_descs[0].first);
@@ -604,22 +658,71 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         cb_descs[0].first && std::popcount(key.mrt_mask) <= 2) {
         const auto& color = texture_cache.GetImage(cb_descs[0].first);
         const auto& depth = texture_cache.GetImage(db_desc.first);
-        if (color.info.pixel_format == vk::Format::eR16G16B16A16Sfloat &&
+        if ((color.info.pixel_format == vk::Format::eR16G16B16A16Sfloat ||
+             color.info.pixel_format == vk::Format::eB10G11R11UfloatPack32) &&
             color.info.size.width == depth.info.size.width &&
             color.info.size.height == depth.info.size.height) {
             upscaler->OnSceneColor(cb_descs[0].first);
             // Blended geometry without depth writes (not full-screen passes): transparents and
             // effects start. Blended layers writing depth (decals, wet/blood ground) are
             // surfaces and stay in the history.
-            if (regs.blend_control[0].enable && !regs.color_buffers[0].info.blend_bypass &&
-                !regs.depth_control.depth_write_enable &&
-                (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+            const bool blended = regs.blend_control[0].enable &&
+                                 !regs.color_buffers[0].info.blend_bypass &&
+                                 !regs.depth_control.depth_write_enable &&
+                                 (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1);
+            // A full-screen pass over the scene (the fog composite): the transparents are in.
+            const bool composite = !blended && regs.num_indices <= 6 &&
+                                   regs.num_instances.NumInstances() <= 1;
+            NoteSceneTraceColor(color, blended, composite);
+            if (blended) {
                 upscaler->OnBlendedSceneDraw();
-            } else if (regs.num_indices <= 6 && regs.num_instances.NumInstances() <= 1) {
-                // A full-screen pass over the scene (the fog composite): the transparents are in.
+            } else if (composite) {
                 upscaler->OnSceneComposite();
             }
         }
+    }
+}
+
+void Rasterizer::NotifySceneReader(const GraphicsPipeline* pipeline) {
+    // PES_SCENE_READER=0: the draw trigger off (A/B against the 0.2 port without it).
+    static const bool on = [] {
+        const char* env = std::getenv("PES_SCENE_READER");
+        return !(env && env[0] == '0');
+    }();
+    if (!on || !upscaler->Enabled()) {
+        return;
+    }
+    // 0 unless this frame has had an HDR scene draw and has not upscaled yet.
+    const VAddr scene = upscaler->SceneColorAddress();
+    if (!scene) {
+        return;
+    }
+    bool samples_scene = false;
+    for (const auto* stage : pipeline->GetStages()) {
+        if (!stage) {
+            continue;
+        }
+        for (const auto& resource : stage->images) {
+            if (!resource.is_written && resource.GetSharp(*stage).Address() == scene) {
+                samples_scene = true;
+            }
+        }
+    }
+    if (!samples_scene) {
+        return;
+    }
+    const auto& key = pipeline->GetGraphicsKey();
+    bool writes_scene_image = false;
+    for (u32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS; ++cb) {
+        if (cb_descs[cb].first && (key.mrt_mask & (1u << cb)) &&
+            upscaler->KnownSceneImage(texture_cache.GetImage(cb_descs[cb].first).info.guest_address)) {
+            writes_scene_image = true;
+        }
+    }
+    // The first frame of a session cannot know the A -> B copy's target yet and upscales one
+    // pass early there (tests/test_upscale_trigger.cpp).
+    if (UpscaleTrigger::Fires({bool(db_desc.first), samples_scene, writes_scene_image})) {
+        upscaler->OnSceneReader();
     }
 }
 
@@ -1512,8 +1615,36 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
             camera_motion->InvalidateHistory();
         }
         camera_motion->SetJitter(upscaler->Jitter());
+        ReportJitterDraws();
+        ReportObjectConstants();
         object_motion->OnFrameStart();
         NoteFrameStart();
+        static const bool scene_trace = std::getenv("PES_SCENE_TRACE") != nullptr;
+        if (scene_trace) {
+            if (scene_trace_frame) {
+                std::printf("SceneTrace: end: %u passes, %u read a scene colour, %u HDR scene draws "
+                            "(%u blended, %u full-screen composites)\n",
+                            scene_trace_pass, scene_trace_hits, scene_trace_scene_draws,
+                            scene_trace_blended, scene_trace_composites);
+                std::fflush(stdout);
+            }
+            // One frame in 300, only once a scene colour has been seen (a match, not menus).
+            scene_trace_frame = scene_trace_ranges[0].address && scene_trace_left > 0 &&
+                                ++scene_trace_frames % 300 == 0;
+            scene_trace_current = 0;
+            if (scene_trace_frame) {
+                --scene_trace_left;
+                scene_trace_pass = scene_trace_hits = scene_trace_scene_draws = 0;
+                scene_trace_blended = scene_trace_composites = 0;
+                std::printf("SceneTrace: frame begins, known scene colours");
+                for (const auto& range : scene_trace_ranges) {
+                    if (range.address) {
+                        std::printf(" %#llx", (unsigned long long)range.address);
+                    }
+                }
+                std::printf("\n");
+            }
+        }
         static const char* scene_debug = std::getenv("PES_SCENE_DEBUG");
         scene_debug_frame = scene_debug && std::remove(scene_debug) == 0;
         scene_targets->debug = scene_debug_frame;
@@ -1524,6 +1655,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
 
     PrepareRenderState(pipeline);
     NotifyUiDraw(pipeline);
+    NotifySceneReader(pipeline);
     const PreparedDraw* draw_prepared = bind_prepared;
     // pes: vertex and index buffers are resolved while the helper binds textures (their
     // commands are recorded after BeginRendering, as before).
@@ -1586,6 +1718,12 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                 break;
             }
             const VAddr address = buffer.base_address;
+            if (size == 272 && memory->IsValidGpuMapping(address, 0) &&
+                memory->ClampRangeSize(address, size) == size) {
+                NoteObjectConstants(vs.pgm_hash ^ (motion_geometry * 0x9E3779B97F4A7C15ull) ^
+                                        regs.num_indices,
+                                    reinterpret_cast<const u8*>(address));
+            }
             if (role == Motion::BufferRole::SmallSkeleton &&
                 memory->IsValidGpuMapping(address, 0) &&
                 memory->ClampRangeSize(address, size) == size) {
@@ -1637,7 +1775,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                 .instances = regs.num_instances.NumInstances(),
                 .first_instance = first_instance,
                 .vertices = range,
-            });
+            }, gated); // pes: skeletons keep history even when their mesh repeats
         }
     }
     pipeline->BindResources(set_writes, push_data, {image_infos.data(), image_infos.size()},
@@ -1647,11 +1785,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     // pes: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
     // full-screen quad leaves an edge column unwritten).
+    TraceScenePass(pipeline, false);
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth() &&
         (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
         draw_jitter = upscaler->Jitter();
     }
+    NoteJitterDraw();
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
@@ -1751,6 +1891,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     motion_geometry = 0;
     PrepareRenderState(pipeline);
     NotifyUiDraw(pipeline);
+    NotifySceneReader(pipeline);
     if (!BindResources(pipeline)) {
         return;
     }
@@ -1786,10 +1927,12 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     if (pipeline->GetGraphicsKey().motion_vectors) {
         object_motion->BindAddresses(pipeline->GetLayout());
     }
+    TraceScenePass(pipeline, false);
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth()) {
         draw_jitter = upscaler->Jitter();
     }
+    NoteJitterDraw();
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
     scheduler.BeginRendering(state);
@@ -1872,8 +2015,35 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
         }
     };
     if (upscaler->Enabled()) {
-        upscaler->OnDispatch(cs.pgm_hash);
+        upscaler->NoteDispatch(cs.pgm_hash, cs_program.dim_x, cs_program.dim_y, cs_program.dim_z);
+        // pes: the upscale starts before the first compute pass of the frame that reads the scene colour
+        // (PES's post-processing combine), whatever its hash.
+        bool reads_scene = false;
+        if (const VAddr scene_address = upscaler->SceneColorAddress()) {
+            static int address_logs = 0;
+            const bool log_this = PesSettings::Get().frame_gen && address_logs < 12;
+            if (log_this) {
+                ++address_logs;
+                std::printf("FrameGen: compute %016llx with scene colour at %#llx, images:",
+                            (unsigned long long)cs.pgm_hash, (unsigned long long)scene_address);
+            }
+            for (const auto& image : cs.images) {
+                const VAddr address = image.GetSharp(cs).Address();
+                if (log_this) {
+                    std::printf(" %#llx", (unsigned long long)address);
+                }
+                if (address == scene_address) {
+                    reads_scene = true;
+                }
+            }
+            if (log_this) {
+                std::printf(" -> %s\n", reads_scene ? "reads it" : "no");
+                std::fflush(stdout);
+            }
+        }
+        upscaler->OnDispatch(cs.pgm_hash, reads_scene);
     }
+    TraceScenePass(pipeline, true);
     bool hle;
     {
         PES_SECTION(ShaderHle);
@@ -2709,6 +2879,70 @@ void TraceShaderBinding(const Shader::Info& stage, VAddr addr, u64 size, bool wr
 }
 } // namespace
 
+// pes: PES_DISCOVER=1 (diagnostic): constant buffers of main-scene draws that contain a projection-like 4x4
+// matrix (about ten exact zeros, one +-1 in the last row or column, last element 0). Aggregated per
+// (stage, slot, size, offset) and printed every 20000 scans with the first sample, to find the camera
+// constants of this title (docs: HANDOFF-0.2).
+static void DiscoverCbuffer(u32 stage, u32 slot, const float* data, u32 size) {
+    static std::mutex cb_mutex;
+    struct Seen {
+        u64 count = 0;
+        std::string sample;
+    };
+    static std::map<std::string, Seen> seen;
+    static u64 scans = 0;
+    if (size < 64 || size > 65536) {
+        return;
+    }
+    std::scoped_lock lock{cb_mutex};
+    const u32 floats = size / 4;
+    for (u32 i = 0; i + 16 <= floats; i += 4) {
+        const float* m = data + i;
+        u32 zeros = 0;
+        bool finite = true;
+        for (int k = 0; k < 16; ++k) {
+            if (!std::isfinite(m[k]) || std::abs(m[k]) > 1.0e7f) {
+                finite = false;
+                break;
+            }
+            zeros += std::abs(m[k]) < 1.0e-7f ? 1 : 0;
+        }
+        if (!finite || zeros < 8 || zeros > 11 || std::abs(m[15]) > 1.0e-7f) {
+            continue;
+        }
+        const bool one = std::abs(std::abs(m[11]) - 1.0f) < 1.0e-4f || std::abs(std::abs(m[14]) - 1.0f) < 1.0e-4f;
+        if (!one || std::abs(m[0]) < 1.0e-4f || std::abs(m[5]) < 1.0e-4f) {
+            continue;
+        }
+        char key[96];
+        std::snprintf(key, sizeof(key), "stage %u slot %u size %u offset %u", stage, slot, size, i * 4);
+        auto& entry = seen[key];
+        if (size == 480 && i == 16 && entry.count == 0) {
+            // The whole 480-byte block (the main camera constants?), one line per 4x4 block.
+            std::printf("DiscoverCbFull: stage %u slot %u\n", stage, slot);
+            for (u32 row = 0; row + 4 <= 120; row += 4) {
+                std::printf("DiscoverCbFull:   [%3u] %g %g %g %g\n", row * 4, data[row], data[row + 1],
+                            data[row + 2], data[row + 3]);
+            }
+        }
+        if (entry.count++ == 0) {
+            char sample[320];
+            std::snprintf(sample, sizeof(sample),
+                          "%g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g", m[0], m[1], m[2], m[3], m[4],
+                          m[5], m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14], m[15]);
+            entry.sample = sample;
+        }
+    }
+    if (++scans % 20000 == 0) {
+        std::printf("DiscoverCb: %llu scans\n", (unsigned long long)scans);
+        for (const auto& [k, v] : seen) {
+            std::printf("DiscoverCb: %6llu  %s  [%s]\n", (unsigned long long)v.count, k.c_str(), v.sample.c_str());
+        }
+        std::fflush(stdout);
+        seen.clear();
+    }
+}
+
 void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* prepared,
                              Shader::Backend::Bindings& binding,
                              Shader::PushData& push_data, u32& write_index) {
@@ -2720,9 +2954,14 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
         if (ring) {
             // Copied by the GPU command thread into the constant ring (read-only).
             if (!desc.IsSpecial()) {
-                if (ring->size == 864 && gbuffer_draw &&
+                if (discover_draw && memory->IsValidGpuMapping(ring->address, 0)) {
+                    DiscoverCbuffer(u32(stage.sw_stage), buffer_index,
+                                    reinterpret_cast<const float*>(ring->address), u32(ring->size));
+                }
+                if ((ring->size == 864 || ring->size == 480) && gbuffer_draw &&
                     memory->IsValidGpuMapping(ring->address, 0)) {
-                    camera_motion->OnConstants(reinterpret_cast<const float*>(ring->address));
+                    camera_motion->OnConstants(reinterpret_cast<const float*>(ring->address),
+                                               u32(ring->size));
                 }
                 push_data.AddOffset(binding.buffer, 0);
             }
@@ -2781,9 +3020,14 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
         } else {
             const auto vsharp =
                 prepared ? prepared->buffer_sharps[buffer_index] : desc.GetSharp(stage);
-            if (vsharp.GetSize() == 864 && gbuffer_draw &&
+            if (discover_draw && memory->IsValidGpuMapping(vsharp.base_address, 0)) {
+                DiscoverCbuffer(u32(stage.sw_stage), buffer_index,
+                                reinterpret_cast<const float*>(vsharp.base_address), u32(vsharp.GetSize()));
+            }
+            if ((vsharp.GetSize() == 864 || vsharp.GetSize() == 480) && gbuffer_draw &&
                 memory->IsValidGpuMapping(vsharp.base_address, 0)) {
-                camera_motion->OnConstants(reinterpret_cast<const float*>(vsharp.base_address));
+                camera_motion->OnConstants(reinterpret_cast<const float*>(vsharp.base_address),
+                                           u32(vsharp.GetSize()));
             }
             // Object motion research: the vertex shader buffers of G-buffer draws.
             if (FrameCapture::Active() && gbuffer_draw && stage.sw_stage == Shader::SwStage::Vertex &&
@@ -4130,8 +4374,18 @@ void Rasterizer::UpdateViewportScissorState() const {
 
             // pes: sub-pixel jitter of scene geometry for the temporal upscaler; the same
             // shift as jittering the projection.
-            viewport.x = (xoffset - xscale) * target_scale[0] + target_offset[0]+draw_jitter[0];
-            viewport.y = (yoffset - yscale) * target_scale[1] + target_offset[1]+draw_jitter[1];
+            // pes: the jitter is in render pixels (the upscaler's input); a pass drawn at
+            // another size (the G-buffer stays 1920x1080 at every preset) shifts by the
+            // same fraction of the screen, not by the same number of its own pixels.
+            const auto& pes_settings = PesSettings::Get();
+            const float render_w = float(pes_settings.active_render_width.load());
+            const float render_h = float(pes_settings.active_render_height.load());
+            const float jitter_x = render_w > 0.0f
+                ? draw_jitter[0] * target_scale[0] * 1920.0f / render_w : draw_jitter[0];
+            const float jitter_y = render_h > 0.0f
+                ? draw_jitter[1] * target_scale[1] * 1080.0f / render_h : draw_jitter[1];
+            viewport.x = (xoffset - xscale) * target_scale[0] + target_offset[0] + jitter_x;
+            viewport.y = (yoffset - yscale) * target_scale[1] + target_offset[1] + jitter_y;
             viewport.width = xscale * 2.0f * target_scale[0];
             viewport.height = yscale * 2.0f * target_scale[1];
         }
@@ -4423,6 +4677,99 @@ void Rasterizer::MarkPass(const GraphicsPipeline* pipeline, const RenderState& s
     });
 }
 
+void Rasterizer::NoteSceneTraceColor(const VideoCore::Image& color, bool blended,
+                                     bool composite) {
+    const VAddr address = color.info.guest_address;
+    for (auto& range : scene_trace_ranges) {
+        if (range.address == address) {
+            break;
+        }
+        if (!range.address) {
+            range = {address, color.info.guest_size};
+            break;
+        }
+    }
+    if (!scene_trace_frame) {
+        return;
+    }
+    ++scene_trace_scene_draws;
+    scene_trace_blended += blended ? 1 : 0;
+    scene_trace_composites += composite ? 1 : 0;
+    // Each switch of the HDR scene target within the frame, with what was drawn before it.
+    if (address != scene_trace_current) {
+        std::printf("SceneTrace: HDR scene target -> %#llx fmt %d %ux%u before pass %u "
+                    "(scene draws %u, blended %u, composites %u so far; this draw %s)\n",
+                    (unsigned long long)address, int(color.info.pixel_format),
+                    color.info.size.width, color.info.size.height, scene_trace_pass + 1,
+                    scene_trace_scene_draws - 1, scene_trace_blended - (blended ? 1 : 0),
+                    scene_trace_composites - (composite ? 1 : 0),
+                    blended ? "blended" : composite ? "full-screen composite" : "opaque");
+        scene_trace_current = address;
+    }
+}
+
+void Rasterizer::TraceScenePass(const Pipeline* pipeline, bool compute) {
+    if (!scene_trace_frame || !pipeline) {
+        return;
+    }
+    ++scene_trace_pass;
+    for (const auto* stage : pipeline->GetStages()) {
+        if (!stage) {
+            continue;
+        }
+        for (const auto& resource : stage->images) {
+            const auto sharp = resource.GetSharp(*stage);
+            const VAddr address = sharp.Address();
+            if (!address) {
+                continue;
+            }
+            // The image itself, one of its mips or an alias starting inside it. (An earlier run
+            // with an estimated extent also matched the separate image 8 MB below.)
+            const SceneTraceRange* hit = nullptr;
+            for (const auto& range : scene_trace_ranges) {
+                if (range.address && address >= range.address &&
+                    address < range.address + std::max(range.size, 1u)) {
+                    hit = &range;
+                    break;
+                }
+            }
+            if (!hit) {
+                continue;
+            }
+            ++scene_trace_hits;
+            std::string target = "-";
+            if (!compute) {
+                const auto& key = static_cast<const GraphicsPipeline*>(pipeline)->GetGraphicsKey();
+                target.clear();
+                for (u32 cb = 0; cb < AmdGpu::NUM_COLOR_BUFFERS; ++cb) {
+                    if (!cb_descs[cb].first || !(key.mrt_mask & (1u << cb))) {
+                        continue;
+                    }
+                    const auto& info = texture_cache.GetImage(cb_descs[cb].first).info;
+                    target += fmt::format("{}{:#x} fmt {} {}x{}{}", target.empty() ? "" : ", ",
+                                          info.guest_address, int(info.pixel_format),
+                                          info.size.width, info.size.height,
+                                          key.blend_controls[cb].enable ? " blend" : "");
+                }
+                if (target.empty()) {
+                    target = "-";
+                }
+            }
+            std::printf("SceneTrace: pass %u %s stage %d hash %016llx reads %#llx (scene %#llx "
+                        "%+lld%s) %ux%u written %d native %d, scene draws so far %u, "
+                        "targets [%s], depth %s\n",
+                        scene_trace_pass, compute ? "compute" : "draw", int(stage->sw_stage),
+                        (unsigned long long)stage->pgm_hash, (unsigned long long)address,
+                        (unsigned long long)hit->address, (long long)(address - hit->address),
+                        hit->address == scene_trace_current ? ", current" : "",
+                        sharp.width + 1, sharp.height + 1, int(resource.is_written),
+                        int(resource.needs_native), scene_trace_scene_draws, target.c_str(),
+                        compute || !db_desc.first ? "none"
+                        : db_desc.first == camera_motion->Depth() ? "scene" : "other");
+        }
+    }
+}
+
 void Rasterizer::NoteFrameStart() {
     if (auto* profiler = GpuProfiler::Get()) {
         profiler->BeginFrame();
@@ -4458,6 +4805,65 @@ void Rasterizer::NoteFrameStart() {
         std::printf("\n");
         lag_histogram = {};
     }
+}
+
+// pes: diagnostics: how many draws of a frame use a depth target, the scene depth, and the jitter.
+void Rasterizer::NoteJitterDraw() {
+    const auto& db = db_desc.first;
+    jitter_stats.depth += db ? 1 : 0;
+    jitter_stats.scene += db && db == camera_motion->Depth() ? 1 : 0;
+    jitter_stats.jittered += draw_jitter[0] != 0.0f || draw_jitter[1] != 0.0f ? 1 : 0;
+}
+
+void Rasterizer::ReportJitterDraws() {
+    static const bool off = std::getenv("PES_JITTER_STATS") == nullptr;
+    if (!off && (jitter_stats.frames < 8 || jitter_stats.frames % 600 == 0)) {
+        const auto j = upscaler->Jitter();
+        std::printf("JitterStats: frame %llu: %u depth draws, %u on the scene depth, %u jittered "
+                    "(jitter %.3f %.3f, depth id %u)\n",
+                    (unsigned long long)jitter_stats.frames, jitter_stats.depth, jitter_stats.scene,
+                    jitter_stats.jittered, j[0], j[1], camera_motion->Depth().index);
+        std::fflush(stdout);
+    }
+    ++jitter_stats.frames;
+    jitter_stats.depth = jitter_stats.scene = jitter_stats.jittered = 0;
+}
+
+// pes: PES_CONST_ROWS=1: which 16-byte rows of the 272-byte object constants change between
+// frames, per draw (a mask of 17 bits), counted over 600 frames: rows that change for every
+// draw follow the camera, rows that change for a few draws are object transforms.
+void Rasterizer::NoteObjectConstants(u64 key, const u8* data) {
+    static const bool on = [] {
+        const char* env = std::getenv("PES_CONST_ROWS");
+        return env && env[0] == '1';
+    }();
+    if (!on) return;
+    auto& entry = const_rows.previous[key];
+    if (entry.frame + 1 == const_rows.frame) {
+        u32 mask = 0;
+        for (u32 row = 0; row < 17; ++row) {
+            mask |= std::memcmp(entry.data.data() + row * 16, data + row * 16, 16) != 0 ? 1u << row : 0u;
+        }
+        ++const_rows.masks[mask];
+    }
+    std::memcpy(entry.data.data(), data, 272);
+    entry.frame = const_rows.frame;
+}
+
+void Rasterizer::ReportObjectConstants() {
+    ++const_rows.frame;
+    if (const_rows.frame % 600 != 0 || const_rows.masks.empty()) return;
+    std::printf("ConstRows: changed-row masks of 272-byte object constants (600 frames):");
+    std::vector<std::pair<u64, u32>> sorted;
+    for (const auto& [mask, count] : const_rows.masks) sorted.emplace_back(count, mask);
+    std::sort(sorted.rbegin(), sorted.rend());
+    for (size_t i = 0; i < std::min<size_t>(sorted.size(), 12); ++i) {
+        std::printf(" %05x x%llu", sorted[i].second, (unsigned long long)sorted[i].first);
+    }
+    std::printf("\n");
+    std::fflush(stdout);
+    const_rows.masks.clear();
+    if (const_rows.previous.size() > 100000) const_rows.previous.clear();
 }
 
 } // namespace Vulkan

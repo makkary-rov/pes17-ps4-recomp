@@ -87,6 +87,10 @@ int main() {
     assert(ClassifyBuffer(96) == BufferRole::SmallSkeleton &&
            ClassifyBuffer(384) == BufferRole::SmallSkeleton);
     assert(ClassifyBuffer(656) == BufferRole::Skeleton && ClassifyBuffer(64) == BufferRole::Other);
+    // PES: camera constants never gate a draw; object constants do; player skeletons always.
+    assert(ClassifyBuffer(480) == BufferRole::Other);
+    assert(ClassifyBuffer(272) == BufferRole::SmallSkeleton);
+    assert(ClassifyBuffer(3072) == BufferRole::Skeleton);
 
     // Index ranges: reused between full scans, rescanned every Revalidate frames, trimmed.
     IndexRangeCache ranges;
@@ -109,5 +113,44 @@ int main() {
     assert(JitterPhases(960, 1920) == 32);
     assert(JitterPhases(640, 1920) == 72);
     assert(JitterPhases(0, 1920) == 8);
-    std::puts("Motion history: PASS (ranges, restart, offsets, matching, capacity, gating, index cache, jitter)");
+    static_assert(!JitterAllowed(true, false), "no resolve last frame: no jitter");
+    static_assert(!JitterAllowed(false, true));
+    static_assert(JitterAllowed(true, true));
+    {
+        const auto close = [](float a, float b) { return std::abs(a - b) <= 1e-3f * std::abs(b); };
+        // PES pre-match camera (zs -0.0001, zo 0.1): near 0.1, far 1000.
+        const auto menu = PlanesFromProjection(-0.0001f, 0.100010f, true);
+        assert(close(menu.near_plane, 0.1f) && close(menu.far_plane, 1000.1f));
+        // PES broadcast camera (zs -0.010819, zo 43.277344): near about 42.8, far about 4000.
+        const auto match = PlanesFromProjection(-0.010819f, 43.277344f, true);
+        assert(close(match.near_plane, 42.81f) && close(match.far_plane, 4000.1f));
+        assert(match.near_plane > 0.0f && match.far_plane > match.near_plane);
+        // Reversed infinite (zs 0): far is the 1e6 stand-in.
+        assert(PlanesFromProjection(0.0f, 0.1f, true).far_plane == 1.0e6f);
+        // Standard Z with near 0.5, far 100: zs = -zo / n and zs + zo / f = 1.
+        const float zo = 1.0f / (1.0f / 100.0f - 1.0f / 0.5f), zs = -zo / 0.5f;
+        const auto standard = PlanesFromProjection(zs, zo, false);
+        assert(close(standard.near_plane, 0.5f) && close(standard.far_plane, 100.0f));
+    }
+    {
+        // A mesh drawn twice per frame (two LED panels) must not borrow the other's history
+        // when unique_only is set; a single draw keeps its history; skeletons opt out.
+        History panels(1024);
+        Draw panel{.shader = 9, .geometry = 10, .indices = 11, .topology = 1, .index_count = 6,
+                   .instances = 1, .first_instance = 0, .vertices = {0, 4}};
+        Draw ball = panel;
+        ball.geometry = 20;
+        panels.NextFrame();
+        panels.Prepare(panel, true);
+        panels.Prepare(panel, true);
+        panels.Prepare(ball, true);
+        panels.NextFrame();
+        assert(!panels.Prepare(panel, true).load);  // repeated last frame
+        assert(!panels.Prepare(panel, true).load);  // second occurrence
+        assert(panels.stats.repeated == 2);
+        assert(panels.Prepare(ball, true).load);     // unique: history
+        panels.NextFrame();
+        assert(panels.Prepare(panel, false).load);   // skeleton: history as before
+    }
+    std::puts("Motion history: PASS (ranges, restart, offsets, matching, capacity, gating, index cache, jitter, repeats)");
 }

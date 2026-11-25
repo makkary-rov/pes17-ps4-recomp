@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
+#include <map>
+#include <unordered_map>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -392,6 +395,12 @@ private:
 
     /// Display pass: counts the frame (PesStats::gpu_frames) and, with PES_BUFFER_STATS, the lag.
     void NoteFrameStart();
+    /// pes: PES_SCENE_TRACE: in a traced frame, logs each draw/dispatch that binds an image
+    /// overlapping the HDR scene colour (the passes that could start post-processing).
+    void TraceScenePass(const Pipeline* pipeline, bool compute);
+    /// pes: after PrepareRenderState, before BindResources: starts the upscale before the
+    /// first post-processing draw (UpscaleTrigger::Fires).
+    void NotifySceneReader(const GraphicsPipeline* pipeline);
     /// PES_GPU_PROFILE: a timestamp where a render pass starts (vk_gpu_profiler.h).
     void MarkPass(const GraphicsPipeline* pipeline, const RenderState& state);
     void BindVertexBuffers(const GraphicsPipeline* pipeline,
@@ -432,8 +441,35 @@ private:
     bool motion_draw = false;
     u64 motion_geometry{};    ///< vertex-stream identity of the current direct draw
     bool gbuffer_draw = false;
+    bool discover_draw = false; ///< PES_DISCOVER: a main-scene (G-buffer) draw
+    // pes: PES_SCENE_TRACE state (TraceScenePass). Every image used as HDR scene colour is
+    // kept across frames (PES uses two per frame): passes before this frame's scene draws are
+    // compared with them too.
+    bool scene_trace_frame = false;
+    int scene_trace_left = 6;
+    u64 scene_trace_frames = 0;
+    u32 scene_trace_pass = 0, scene_trace_hits = 0, scene_trace_scene_draws = 0;
+    u32 scene_trace_blended = 0, scene_trace_composites = 0;
+    VAddr scene_trace_current = 0; ///< this frame's latest HDR scene draw target
+    struct SceneTraceRange {
+        VAddr address;
+        u32 size;
+    };
+    std::array<SceneTraceRange, 4> scene_trace_ranges{};
+    void NoteSceneTraceColor(const VideoCore::Image& color, bool blended, bool composite);
     std::unique_ptr<TemporalUpscaler> upscaler; // pes: FSR (docs/upscaler.md)
     std::array<float, 2> draw_jitter{};         ///< viewport offset of the current draw, pixels
+    struct JitterStats { u64 frames = 0; u32 depth = 0, scene = 0, jittered = 0; } jitter_stats;
+    void NoteJitterDraw();
+    void ReportJitterDraws();
+    struct ConstRowEntry { u64 frame = 0; std::array<u8, 272> data{}; };
+    struct ConstRows {
+        u64 frame = 1;
+        std::unordered_map<u64, ConstRowEntry> previous;
+        std::map<u32, u64> masks;
+    } const_rows;
+    void NoteObjectConstants(u64 key, const u8* data);
+    void ReportObjectConstants();
     std::array<float,2> target_offset{};
     std::array<float, 2> target_scale{1.0f, 1.0f}; ///< pass drawn into the upscaler's output-size images
     const bool host_markers_enabled;
